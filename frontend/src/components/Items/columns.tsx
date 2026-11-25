@@ -3,6 +3,7 @@ import { Check, Copy } from "lucide-react"
 
 import type { ItemPublic } from "@/client"
 import type { DataTableFeatures } from "@/components/Common/DataTable"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { cn } from "@/lib/utils"
@@ -43,6 +44,15 @@ export const columns: ColumnDef<DataTableFeatures, ItemPublic>[] = [
     header: "Title",
     cell: ({ row }) => (
       <span className="font-medium">{row.original.title}</span>
+    ),
+  },
+  {
+    accessorKey: "priority",
+    header: "Priority",
+    cell: ({ row }) => (
+      <Badge variant="outline" className="capitalize">
+        {row.original.priority}
+      </Badge>
     ),
   },
   {

@@ -178,6 +178,12 @@ Use `low`, `normal`, and `high`, with `normal` as the default. Unknown values ar
   head `7b3d9e2f1a4c`, client regenerated with the `ItemPriority` union, `bun run build` passed,
   Playwright items suite 11/11 on a disposable database at ports 8100/5273, and an Orca browser
   accessibility snapshot showed High/Low/Normal priority values.
+- **Review correction:** the migration was first written as
+  `<new-revision>_add_item_priority.py`, because the approved checkpoint used that literal
+  placeholder path. Review renamed it to `7b3d9e2f1a4c_add_item_priority.py` to match the Alembic
+  convention used by every existing migration. Alembic reads the revision id inside the module, so
+  history and the applied database state were unchanged. This is a naming-governance finding for
+  plan generation, not an application defect.
 - **Browser limitation:** `screenshot` failed in the browser runtime; the interactive snapshot was
   used as visual evidence. Recorded, not repaired.
 - **Incident:** the first e2e attempt collided with the lab servers on ports 8000/5173 and wrote test

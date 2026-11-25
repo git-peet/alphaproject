@@ -1,7 +1,9 @@
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from pydantic import EmailStr
+from sqlalchemy import String
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -66,10 +68,19 @@ class UsersPublic(SQLModel):
     count: int
 
 
+class ItemPriority(StrEnum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+
+
 # Shared properties
 class ItemBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
+    priority: ItemPriority = Field(
+        default=ItemPriority.NORMAL, sa_type=String(16), max_length=16
+    )
 
 
 # Properties to receive on item creation
@@ -81,6 +92,7 @@ class ItemCreate(ItemBase):
 class ItemUpdate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
+    priority: ItemPriority | None = None
 
 
 # Database model, database table inferred from class name

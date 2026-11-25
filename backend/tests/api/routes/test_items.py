@@ -162,3 +162,72 @@ def test_delete_item_not_enough_permissions(
     assert response.status_code == 403
     content = response.json()
     assert content["detail"] == "Not enough permissions"
+
+
+def test_create_item_defaults_to_normal_priority(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/items/",
+        headers=superuser_token_headers,
+        json={"title": "Default priority"},
+    )
+    assert response.status_code == 200
+    assert response.json()["priority"] == "normal"
+
+
+def test_create_item_with_high_priority(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/items/",
+        headers=superuser_token_headers,
+        json={"title": "Urgent", "priority": "high"},
+    )
+    assert response.status_code == 200
+    item_id = response.json()["id"]
+    assert response.json()["priority"] == "high"
+
+    read_response = client.get(
+        f"{settings.API_V1_STR}/items/{item_id}",
+        headers=superuser_token_headers,
+    )
+    assert read_response.status_code == 200
+    assert read_response.json()["priority"] == "high"
+
+
+def test_create_item_rejects_unknown_priority(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/items/",
+        headers=superuser_token_headers,
+        json={"title": "Bad priority", "priority": "urgent"},
+    )
+    assert response.status_code == 422
+
+
+def test_update_item_priority(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    item = create_random_item(db)
+    response = client.put(
+        f"{settings.API_V1_STR}/items/{item.id}",
+        headers=superuser_token_headers,
+        json={"priority": "low"},
+    )
+    assert response.status_code == 200
+    assert response.json()["priority"] == "low"
+    assert response.json()["title"] == item.title
+
+
+def test_update_item_rejects_unknown_priority(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    item = create_random_item(db)
+    response = client.put(
+        f"{settings.API_V1_STR}/items/{item.id}",
+        headers=superuser_token_headers,
+        json={"priority": "urgent"},
+    )
+    assert response.status_code == 422

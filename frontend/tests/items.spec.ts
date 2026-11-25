@@ -41,10 +41,24 @@ test.describe("Items management", () => {
     await page.getByRole("button", { name: "Add Item" }).click()
     await page.getByLabel("Title").fill(title)
     await page.getByLabel("Description").fill(description)
+    await page.getByRole("combobox", { name: "Priority" }).click()
+    await page.getByRole("option", { name: "High" }).click()
     await page.getByRole("button", { name: "Save" }).click()
 
     await expect(page.getByText("Item created successfully")).toBeVisible()
     await expect(page.getByText(title)).toBeVisible()
+    await expect(page.getByText("high", { exact: true })).toBeVisible()
+  })
+
+  test("New items default to normal priority", async ({ page }) => {
+    const title = randomItemTitle()
+
+    await page.getByRole("button", { name: "Add Item" }).click()
+    await page.getByLabel("Title").fill(title)
+    await page.getByRole("button", { name: "Save" }).click()
+
+    await expect(page.getByText("Item created successfully")).toBeVisible()
+    await expect(page.getByText("normal", { exact: true })).toBeVisible()
   })
 
   test("Create item with only required fields", async ({ page }) => {
@@ -94,10 +108,13 @@ test.describe("Items management", () => {
 
       const updatedTitle = randomItemTitle()
       await page.getByLabel("Title").fill(updatedTitle)
+      await page.getByRole("combobox", { name: "Priority" }).click()
+      await page.getByRole("option", { name: "Low" }).click()
       await page.getByRole("button", { name: "Save" }).click()
 
       await expect(page.getByText("Item updated successfully")).toBeVisible()
       await expect(page.getByText(updatedTitle)).toBeVisible()
+      await expect(page.getByText("low", { exact: true })).toBeVisible()
     })
 
     test("Delete an item successfully", async ({ page }) => {
