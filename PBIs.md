@@ -39,6 +39,88 @@ Checked against the pristine template at commit `c3113b6` + `176d2f0`. Facts use
 Nothing below this section has been changed; it is the inherited exp4 text, unmodified.
 
 ---
+## PBI 0 — Isolated test-database runner
+
+**Status:** drafted; not approved for implementation.
+
+### Learning outcomes
+
+- How PostgreSQL databases and roles differ from schemas, and why a separate database — not a
+  separate schema — is the simplest reliable isolation for this stack.
+- How configuration flows: `.env` → `pydantic-settings` `Settings` → `create_engine` → the `engine`
+  that `conftest.py` imports at module load, and why a process-level environment override is what
+  actually redirects it.
+- Why pytest's `session`-scoped autouse fixture in `backend/tests/conftest.py` makes the target
+  database a safety-critical choice rather than a detail.
+- How Alembic treats migrations as the schema source of truth for a freshly created database.
+- Shell hygiene for destructive scripts: `set -euo pipefail`, `trap` cleanup, and refusing rather
+  than guessing.
+
+### Problem
+
+`backend/tests/conftest.py` imports `engine` from `app.core.db`, which is built from
+`settings.DATABASE_URL`. The session-scoped fixture calls `init_db(session)` and then deletes all
+`Item` and `User` rows. `backend/scripts/test.sh` runs pytest with no database override, so running
+the suite writes to and then empties whatever database `DATABASE_URL` names — on this workspace, the
+lab application database.
+
+The upstream template ships no isolated runner. Every later PBI that adds tests inherits this
+hazard, so it is fixed first.
+
+### User story
+
+As the developer of this lab, I want the backend test suite to run against a disposable database, so
+that running tests can never modify the application data in my local stack.
+
+### Acceptance criteria
+
+1. `backend/scripts/test-isolated.sh` exists, is executable, and runs the full backend suite.
+2. It creates a database whose name contains `test` with a per-run suffix, applies
+   `alembic upgrade head` to it, runs `pytest tests/`, and exits with pytest's status.
+3. **Guard:** it refuses to run, with a clear message and non-zero exit, when the resolved target
+   database name does not contain `test`, or when it equals the database named by the application
+   `DATABASE_URL`. It must never fall back to the application database.
+4. **Cleanup:** the disposable database is dropped on success, on failure, and on interrupt
+   (`trap`), verified by the script itself reporting the drop or by the caller checking that no
+   `app_test_*` database remains.
+5. **Non-destructiveness:** running the suite leaves the application database unchanged. Verified by
+   recording `users`/`items` row counts before and after.
+6. No new third-party dependency is added; the script uses `psql` from the running compose `db`
+   service (or `uv run` with psycopg already present) and the existing `uv`/`alembic` tooling.
+7. The script never prints a password or the full `DATABASE_URL`; failures name the problem without
+   echoing secret values.
+8. A short usage note is added to the repository documentation where test commands are described.
+
+### Proposed scope
+
+- `backend/scripts/test-isolated.sh` (new)
+- `backend/README.md` (one usage paragraph, if that is where test commands are documented)
+
+Explicitly out of scope: changing application code, altering `conftest.py`'s fixtures, adding a
+pytest plugin, containerising the test run, or adding CI. If the script cannot work without touching
+`conftest.py`, stop and report the reason instead of changing it.
+
+### Verification plan
+
+- `bash backend/scripts/test-isolated.sh` → suite passes, exit 0.
+- Before/after: `select count(*) from "user"` and `from item` on the application database are
+  identical.
+- Guard: run with `DATABASE_URL` pointing at the application database → script refuses, exit
+  non-zero, message names the rule.
+- Cleanup: after a normal run and after a forced failure, no `app_test_*` database remains.
+- `docker compose exec db psql -l` shows no leftover disposable database.
+
+### Risks and stop conditions
+
+- Dropping the wrong database would be destructive. The guard is the mitigation; if the target name
+  cannot be parsed with certainty, the script must exit rather than proceed.
+- Local Postgres already holds the lab application data; the verification step above is a
+  pre-condition, not a formality.
+- Stop if the compose database service is not healthy, or if creating a database requires
+  credentials the workspace does not hold.
+
+---
+
 **Status:** `inherited reference` — restored from the exp4 delivery line (archived
 2026-11-23). Nothing in this file is implemented in this repository: AlphaProject starts from the
 pristine upstream template, so every PBI below is a candidate again.
