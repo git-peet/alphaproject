@@ -35,6 +35,108 @@ export type Body_login_login_access_token = {
 };
 
 /**
+ * ConversationCreate
+ */
+export type ConversationCreate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Transcript
+     *
+     * Up to 20000 characters. Longer transcripts are rejected without echoing the text.
+     */
+    transcript: string;
+};
+
+/**
+ * ConversationPublic
+ */
+export type ConversationPublic = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Transcript
+     *
+     * Up to 20000 characters. Longer transcripts are rejected without echoing the text.
+     */
+    transcript: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Owner Id
+     */
+    owner_id: string;
+    /**
+     * Created At
+     */
+    created_at?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
+ * ConversationSummary
+ */
+export type ConversationSummary = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Owner Id
+     */
+    owner_id: string;
+    /**
+     * Created At
+     */
+    created_at?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
+ * ConversationUpdate
+ */
+export type ConversationUpdate = {
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Transcript
+     */
+    transcript?: string | null;
+};
+
+/**
+ * ConversationsPublic
+ */
+export type ConversationsPublic = {
+    /**
+     * Data
+     */
+    data: Array<ConversationSummary>;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
  * HTTPValidationError
  */
 export type HTTPValidationError = {
@@ -928,6 +1030,155 @@ export type itemsUpdateItemResponses = {
 };
 
 export type itemsUpdateItemResponse = itemsUpdateItemResponses[keyof itemsUpdateItemResponses];
+
+export type conversationsReadConversationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Skip
+         */
+        skip?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/conversations/';
+};
+
+export type conversationsReadConversationsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsReadConversationsError = conversationsReadConversationsErrors[keyof conversationsReadConversationsErrors];
+
+export type conversationsReadConversationsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationsPublic;
+};
+
+export type conversationsReadConversationsResponse = conversationsReadConversationsResponses[keyof conversationsReadConversationsResponses];
+
+export type conversationsCreateConversationData = {
+    body: ConversationCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/conversations/';
+};
+
+export type conversationsCreateConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsCreateConversationError = conversationsCreateConversationErrors[keyof conversationsCreateConversationErrors];
+
+export type conversationsCreateConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationPublic;
+};
+
+export type conversationsCreateConversationResponse = conversationsCreateConversationResponses[keyof conversationsCreateConversationResponses];
+
+export type conversationsDeleteConversationData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{id}';
+};
+
+export type conversationsDeleteConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsDeleteConversationError = conversationsDeleteConversationErrors[keyof conversationsDeleteConversationErrors];
+
+export type conversationsDeleteConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: Message;
+};
+
+export type conversationsDeleteConversationResponse = conversationsDeleteConversationResponses[keyof conversationsDeleteConversationResponses];
+
+export type conversationsReadConversationData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{id}';
+};
+
+export type conversationsReadConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsReadConversationError = conversationsReadConversationErrors[keyof conversationsReadConversationErrors];
+
+export type conversationsReadConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationPublic;
+};
+
+export type conversationsReadConversationResponse = conversationsReadConversationResponses[keyof conversationsReadConversationResponses];
+
+export type conversationsUpdateConversationData = {
+    body: ConversationUpdate;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{id}';
+};
+
+export type conversationsUpdateConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsUpdateConversationError = conversationsUpdateConversationErrors[keyof conversationsUpdateConversationErrors];
+
+export type conversationsUpdateConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationPublic;
+};
+
+export type conversationsUpdateConversationResponse = conversationsUpdateConversationResponses[keyof conversationsUpdateConversationResponses];
 
 export type privateCreateUserData = {
     body: PrivateUserCreate;

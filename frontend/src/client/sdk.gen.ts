@@ -2,7 +2,7 @@
 
 import { type Client, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { itemsCreateItemData, itemsCreateItemErrors, itemsCreateItemResponses, itemsDeleteItemData, itemsDeleteItemErrors, itemsDeleteItemResponses, itemsReadItemData, itemsReadItemErrors, itemsReadItemResponses, itemsReadItemsData, itemsReadItemsErrors, itemsReadItemsResponses, itemsUpdateItemData, itemsUpdateItemErrors, itemsUpdateItemResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordHtmlContentData, loginRecoverPasswordHtmlContentErrors, loginRecoverPasswordHtmlContentResponses, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, privateCreateUserData, privateCreateUserErrors, privateCreateUserResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
+import type { conversationsCreateConversationData, conversationsCreateConversationErrors, conversationsCreateConversationResponses, conversationsDeleteConversationData, conversationsDeleteConversationErrors, conversationsDeleteConversationResponses, conversationsReadConversationData, conversationsReadConversationErrors, conversationsReadConversationResponses, conversationsReadConversationsData, conversationsReadConversationsErrors, conversationsReadConversationsResponses, conversationsUpdateConversationData, conversationsUpdateConversationErrors, conversationsUpdateConversationResponses, itemsCreateItemData, itemsCreateItemErrors, itemsCreateItemResponses, itemsDeleteItemData, itemsDeleteItemErrors, itemsDeleteItemResponses, itemsReadItemData, itemsReadItemErrors, itemsReadItemResponses, itemsReadItemsData, itemsReadItemsErrors, itemsReadItemsResponses, itemsUpdateItemData, itemsUpdateItemErrors, itemsUpdateItemResponses, loginLoginAccessTokenData, loginLoginAccessTokenErrors, loginLoginAccessTokenResponses, loginRecoverPasswordData, loginRecoverPasswordErrors, loginRecoverPasswordHtmlContentData, loginRecoverPasswordHtmlContentErrors, loginRecoverPasswordHtmlContentResponses, loginRecoverPasswordResponses, loginResetPasswordData, loginResetPasswordErrors, loginResetPasswordResponses, loginTestTokenData, loginTestTokenResponses, privateCreateUserData, privateCreateUserErrors, privateCreateUserResponses, usersCreateUserData, usersCreateUserErrors, usersCreateUserResponses, usersDeleteUserData, usersDeleteUserErrors, usersDeleteUserMeData, usersDeleteUserMeResponses, usersDeleteUserResponses, usersReadUserByIdData, usersReadUserByIdErrors, usersReadUserByIdResponses, usersReadUserMeData, usersReadUserMeResponses, usersReadUsersData, usersReadUsersErrors, usersReadUsersResponses, usersRegisterUserData, usersRegisterUserErrors, usersRegisterUserResponses, usersUpdatePasswordMeData, usersUpdatePasswordMeErrors, usersUpdatePasswordMeResponses, usersUpdateUserData, usersUpdateUserErrors, usersUpdateUserMeData, usersUpdateUserMeErrors, usersUpdateUserMeResponses, usersUpdateUserResponses, utilsHealthCheckData, utilsHealthCheckResponses, utilsTestEmailData, utilsTestEmailErrors, utilsTestEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -36,7 +36,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Test Token
      *
@@ -50,7 +50,7 @@ export class LoginService {
             ...options
         });
     }
-    
+
     /**
      * Recover Password
      *
@@ -63,7 +63,7 @@ export class LoginService {
             ...options
         });
     }
-    
+
     /**
      * Reset Password
      *
@@ -80,7 +80,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Recover Password Html Content
      *
@@ -110,7 +110,7 @@ export class UsersService {
             ...options
         });
     }
-    
+
     /**
      * Create User
      *
@@ -128,7 +128,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Delete User Me
      *
@@ -142,7 +142,7 @@ export class UsersService {
             ...options
         });
     }
-    
+
     /**
      * Read User Me
      *
@@ -156,7 +156,7 @@ export class UsersService {
             ...options
         });
     }
-    
+
     /**
      * Update User Me
      *
@@ -174,7 +174,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Update Password Me
      *
@@ -192,7 +192,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Register User
      *
@@ -209,7 +209,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Delete User
      *
@@ -223,7 +223,7 @@ export class UsersService {
             ...options
         });
     }
-    
+
     /**
      * Read User By Id
      *
@@ -237,7 +237,7 @@ export class UsersService {
             ...options
         });
     }
-    
+
     /**
      * Update User
      *
@@ -271,7 +271,7 @@ export class UtilsService {
             ...options
         });
     }
-    
+
     /**
      * Health Check
      */
@@ -298,7 +298,7 @@ export class ItemsService {
             ...options
         });
     }
-    
+
     /**
      * Create Item
      *
@@ -316,7 +316,7 @@ export class ItemsService {
             }
         });
     }
-    
+
     /**
      * Delete Item
      *
@@ -330,7 +330,7 @@ export class ItemsService {
             ...options
         });
     }
-    
+
     /**
      * Read Item
      *
@@ -344,7 +344,7 @@ export class ItemsService {
             ...options
         });
     }
-    
+
     /**
      * Update Item
      *
@@ -355,6 +355,86 @@ export class ItemsService {
             responseType: 'json',
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/api/v1/items/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+}
+
+export class ConversationsService {
+    /**
+     * Read Conversations
+     *
+     * Retrieve conversations owned by the current user.
+     */
+    public static readConversations<ThrowOnError extends boolean = true>(options?: Options<conversationsReadConversationsData, ThrowOnError>) {
+        return (options?.client ?? client).get<conversationsReadConversationsResponses, conversationsReadConversationsErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/conversations/',
+            ...options
+        });
+    }
+
+    /**
+     * Create Conversation
+     *
+     * Create a conversation owned by the current user.
+     */
+    public static createConversation<ThrowOnError extends boolean = true>(options: Options<conversationsCreateConversationData, ThrowOnError>) {
+        return (options.client ?? client).post<conversationsCreateConversationResponses, conversationsCreateConversationErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/conversations/',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+
+    /**
+     * Delete Conversation
+     *
+     * Delete a conversation owned by the current user.
+     */
+    public static deleteConversation<ThrowOnError extends boolean = true>(options: Options<conversationsDeleteConversationData, ThrowOnError>) {
+        return (options.client ?? client).delete<conversationsDeleteConversationResponses, conversationsDeleteConversationErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/conversations/{id}',
+            ...options
+        });
+    }
+
+    /**
+     * Read Conversation
+     *
+     * Get one conversation owned by the current user.
+     */
+    public static readConversation<ThrowOnError extends boolean = true>(options: Options<conversationsReadConversationData, ThrowOnError>) {
+        return (options.client ?? client).get<conversationsReadConversationResponses, conversationsReadConversationErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/conversations/{id}',
+            ...options
+        });
+    }
+
+    /**
+     * Update Conversation
+     *
+     * Update a conversation owned by the current user.
+     */
+    public static updateConversation<ThrowOnError extends boolean = true>(options: Options<conversationsUpdateConversationData, ThrowOnError>) {
+        return (options.client ?? client).put<conversationsUpdateConversationResponses, conversationsUpdateConversationErrors, ThrowOnError>({
+            responseType: 'json',
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/v1/conversations/{id}',
             ...options,
             headers: {
                 'Content-Type': 'application/json',

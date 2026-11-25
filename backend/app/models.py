@@ -55,6 +55,9 @@ class User(UserBase, table=True):
     hashed_password: str
     created_at: datetime | None = Field(default_factory=get_datetime_utc)
     items: list[Item] = Relationship(back_populates="owner", cascade_delete=True)
+    conversations: list[Conversation] = Relationship(
+        back_populates="owner", cascade_delete=True
+    )
 
 
 # Properties to return via API, id is always required
@@ -114,6 +117,71 @@ class ItemPublic(ItemBase):
 
 class ItemsPublic(SQLModel):
     data: list[ItemPublic]
+    count: int
+
+
+CONVERSATION_TITLE_MAX_LENGTH = 255
+CONVERSATION_TRANSCRIPT_MAX_LENGTH = 20_000
+
+
+# Shared properties
+class ConversationBase(SQLModel):
+    title: str = Field(min_length=1, max_length=CONVERSATION_TITLE_MAX_LENGTH)
+    # No Pydantic max_length: enforced in the route so the 422 body never echoes
+    # the transcript. The database column is the backstop.
+    transcript: str = Field(
+        min_length=1,
+        sa_type=String(CONVERSATION_TRANSCRIPT_MAX_LENGTH),
+        description=(
+            f"Up to {CONVERSATION_TRANSCRIPT_MAX_LENGTH} characters. "
+            "Longer transcripts are rejected without echoing the text."
+        ),
+    )
+
+
+# Properties to receive on conversation creation
+class ConversationCreate(ConversationBase):
+    pass
+
+
+# Properties to receive on conversation update
+class ConversationUpdate(SQLModel):
+    title: str | None = Field(
+        default=None, min_length=1, max_length=CONVERSATION_TITLE_MAX_LENGTH
+    )
+    transcript: str | None = Field(default=None, min_length=1)
+
+
+# Database model, database table inferred from class name
+class Conversation(ConversationBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    created_at: datetime | None = Field(default_factory=get_datetime_utc)
+    updated_at: datetime | None = Field(default_factory=get_datetime_utc)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+    owner: User | None = Relationship(back_populates="conversations")
+
+
+# List projection, deliberately without the transcript
+class ConversationSummary(SQLModel):
+    id: uuid.UUID
+    title: str
+    owner_id: uuid.UUID
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+# Properties to return via API, id is always required
+class ConversationPublic(ConversationBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ConversationsPublic(SQLModel):
+    data: list[ConversationSummary]
     count: int
 
 
