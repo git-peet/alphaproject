@@ -68,6 +68,8 @@ $ uv run bash scripts/test.sh
 
 The tests run with Pytest. Modify existing tests or add new ones in `./backend/tests/`.
 
+For an isolated run that never touches the application database, use the disposable-database runner from the project root: `bash backend/scripts/test-isolated.sh`. It creates a database named `app_test_<suffix>` derived from the configured application database name, applies `alembic upgrade head`, runs `pytest tests/`, and drops the database on success, failure, or interrupt. It refuses to run if the target name lacks `test` or equals the application database; `TEST_DB_NAME` exists only to exercise that guard. Extra arguments are forwarded to pytest. It requires a healthy Compose `db` service and never prints credentials.
+
 If you use GitHub Actions, the tests will run automatically.
 
 ### Test a Running Stack
