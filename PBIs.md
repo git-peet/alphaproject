@@ -342,6 +342,27 @@ As a signed-in user, I want to create, find, and review my conversations and the
 - Add focused frontend tests for form validation, the main list/detail flow, and triage loading/error/result states without starting the application or requiring a live model provider.
 - Do not expose another user's conversation in routes, caches, or UI state.
 
+### Run record — 2026-11-25
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** `bun run build` and lint passed; Playwright `conversations.spec.ts` + `items.spec.ts`
+  **18/18** on a disposable stack at ports 8100/5273. The first run failed 3 tests because the list
+  route had no `<Outlet />` for nested detail; fixed and reran clean. One unrelated items
+  “Page crashed” flake in that first run passed on rerun.
+- **Scope discipline:** frontend-only; no backend, client, auth-handler, dependency, or database
+  migration change. No leftover disposable databases; app rows unchanged (`users=10, items=4,
+  conversations=0`).
+- **Privacy:** a second user opening another user's conversation URL lands on `/login` via the
+  global 403→logout behaviour; no title or transcript rendered. This is existing global behaviour,
+  documented as a finding, not changed.
+- **Measured session:** 316 s, 54 tool calls, 5 retrieval calls (2 applicable, 3 no_match), 14.4M
+  tokens, $0.0687, model `deepseek-v4.1-flash`. No gate blocks.
+- **Knowledge:** one handoff staged and promoted with explicit user approval:
+  `ui-treats-403-as-logout`. Pending queue empty.
+- **Workflow:** implementation log written before checkpoint disposition; B then deleted the
+  checkpoint without a gate conflict. The prompt-ordering fix remains proposed, not applied.
+- **Next safe action:** commit the application changes; start PBI 5 only after that.
+
 ---
 
 ## PBI 5 — Add content-free triage usage accounting
