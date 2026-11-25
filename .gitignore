@@ -1,0 +1,37 @@
+.vscode/*
+!.vscode/extensions.json
+node_modules/
+backend/app/frontend/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Local environment files hold credentials. Commit only the sanitized examples.
+.env
+.env.*
+!.env.example
+!**/.env.example
+frontend/.env
+
+# Workspace-local AgenticLab installation, Pi wiring, and project knowledge/state
+/AgenticLab/
+/.pi/
+/knowledge/
+/knowledge-pending/
+/implementation-logs/
+/notes/
+
+# Generated API snapshot and disposable local databases
+/openapi.json
+*.db
+*.sqlite
+*.sqlite3
+backend/htmlcov/
+
+# Local Python environments and caches
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
