@@ -119,6 +119,25 @@ pytest plugin, containerising the test run, or adding CI. If the script cannot w
 - Stop if the compose database service is not healthy, or if creating a database requires
   credentials the workspace does not hold.
 
+### Run record — 2026-11-25
+
+- **Status:** complete. Committed as `49649b1` (`backend/scripts/test-isolated.sh` + `backend/README.md`).
+- **Result:** 58 backend tests passed on a disposable database; application database remained
+  `users=2, items=0`; both guards refused with exit 1; no `app_test_*` database remained after the run.
+- **Measured session:** 589 s, 84 tool calls, 7 retrieval calls, 3.96M tokens; free model so cost was
+  unavailable. Four action-scope blocks (`chmod +x` attempts outside approved scope) and one
+  knowledge-shell block occurred; none broke the task.
+- **Knowledge:** two handoff candidates were staged and promoted with explicit user approval:
+  `env-override-redirects-pytest-and-alembic` and `no-xtrace-with-database-url`.
+- **Workflow finding (see also `AgenticLab-v5/DEV-LOG.md` and `C04.2`):** checkpoint disposition B
+  was chosen before the implementation log was written. Deleting the checkpoint removed the gate's
+  authorization source, so the log write was correctly refused. The operator wrote the 55-line log
+  from verified evidence instead. The complementary failure was observed earlier: keeping the
+  checkpoint leaves the gate armed with a stale scope and blocks unrelated default work until a
+  restart. **Proposed, not applied:** in `prompts/delivery/implement.md`, write the implementation
+  log *before* asking A/B, so A/B only controls transient checkpoint retention. No payload change
+  was made during this PBI.
+
 ---
 
 **Status:** `inherited reference` — restored from the exp4 delivery line (archived
