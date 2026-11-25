@@ -171,6 +171,33 @@ Use `low`, `normal`, and `high`, with `normal` as the default. Unknown values ar
 - Database tests use an isolated disposable test database; never a shared development or production database.
 - Do not change unrelated authentication, item ownership, or deployment behavior.
 
+### Run record — 2026-11-25
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** backend suite 63/63 on the isolated runner, 5 focused priority tests, single Alembic
+  head `7b3d9e2f1a4c`, client regenerated with the `ItemPriority` union, `bun run build` passed,
+  Playwright items suite 11/11 on a disposable database at ports 8100/5273, and an Orca browser
+  accessibility snapshot showed High/Low/Normal priority values.
+- **Browser limitation:** `screenshot` failed in the browser runtime; the interactive snapshot was
+  used as visual evidence. Recorded, not repaired.
+- **Incident:** the first e2e attempt collided with the lab servers on ports 8000/5173 and wrote test
+  rows into the application database (`users` 2 → 10, `items` 0 → 3). The agent stopped rather than
+  deleting rows or processes. After explicit authorization, it stopped the lab servers, reran on
+  alternate ports, dropped the disposable DB, and left the application rows as evidence.
+- **Recovery:** the lab servers were restarted afterwards; backend :8000 and frontend :5173 both
+  returned HTTP 200 and the application database was healthy. Do not treat the absence of the UI
+  during that interval as a database failure.
+- **Measured session:** 31,521 s window (includes a long blocked interval), 204 tool calls, 17
+  retrieval calls (6 applicable, 11 no_match), 19.5M tokens; free model so cost was unavailable.
+  Gate blocks: 6 action-scope, 3 knowledge-shell; none broke the task.
+- **Knowledge:** both checkpoint handoffs were staged and promoted with explicit user approval:
+  `client-generation-script-side-effects` and `playwright-compose-targets-app-database`.
+- **Workflow finding:** following the lab instruction, the implementation log was written **before**
+  checkpoint disposition, so choosing B caused no gate conflict. This is the second data point for
+  the deferred prompt-ordering fix in `AgenticLab-v5` `C04.2` (first: PBI 0's failure when B preceded
+  the log). **Fix remains proposed, not applied.**
+- **Next safe action:** commit the application changes; start PBI 2 only after that.
+
 ---
 
 ## PBI 2 — Add Conversation storage and CRUD API
