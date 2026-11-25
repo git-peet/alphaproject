@@ -297,6 +297,29 @@ As a signed-in user, I want to request a structured triage of a conversation I o
 - Tests use fake responses and verify owner isolation, validation failures, retry limits, and persistence without a live provider.
 - Never log transcripts, prompts, model output, secrets, or credentials. A live provider integration requires a separate PBI and explicit provider/privacy/cost approval.
 
+### Run record — 2026-11-25
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** single Alembic head `4a7c2b9d1e63`; triage helper tests and full isolated backend suite
+  passed; client regenerated; build passed. Lab database migrated additively with nullable triage
+  columns on `conversation`, no row loss.
+- **Behaviour:** owner-only triage (403 for non-owner and superuser, 404 for unknown conversation);
+  bounded one retry/two attempts across malformed JSON, missing fields, invalid enums, timeout, and
+  provider errors; 504 for repeated timeouts and 502 otherwise; invalid results never stored; prior
+  results preserved on failure; transcript never logged or echoed.
+- **Measured session:** 459 s, 60 tool calls, 5 retrieval calls (2 applicable, 3 no_match), 14.4M
+  tokens, $0.0700, model `deepseek-v4.1-flash`. Gate blocks: 2 action-scope; none broke the task.
+- **Knowledge:** one new verified handoff was staged and promoted with explicit user approval:
+  `triage-client-injected-via-fastapi-dependency`. Pending queue empty. Retrieval and promotion
+  happened as part of implementation, with no workflow ceremony.
+- **Workflow:** implementation log written before checkpoint disposition; B then deleted the
+  checkpoint without a gate conflict. The prompt-ordering fix remains proposed, not applied.
+- **User judgement (recorded as such, not as a measurement):** the user reported a measurable
+  qualitative difference from earlier prototype phases — less friction, more organic knowledge
+  retrieval and promotion, and faster progress from `/plan` to `/implement`. This aligns with the
+  retrieval, promotion, and gate-block data but has no same-task plain-Pi baseline.
+- **Next safe action:** commit the application changes; start PBI 4 only after that.
+
 ---
 
 ## PBI 4 — Add the Conversations UI
