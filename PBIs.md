@@ -196,6 +196,16 @@ Use `low`, `normal`, and `high`, with `normal` as the default. Unknown values ar
   checkpoint disposition, so choosing B caused no gate conflict. This is the second data point for
   the deferred prompt-ordering fix in `AgenticLab-v5` `C04.2` (first: PBI 0's failure when B preceded
   the log). **Fix remains proposed, not applied.**
+- **Post-run application-state finding:** after the servers were restarted, the UI failed with what
+  Axios displayed as a CORS error. The real cause was in `/tmp/alpha-backend.log`:
+  `psycopg.errors.UndefinedColumn: column item.priority does not exist`. The application database was
+  still at Alembic revision `fe56fa70289e`; PBI 1's e2e run had migrated only its disposable database.
+  Applying `alembic upgrade head` to the lab database (`fe56fa70289e` → `7b3d9e2f1a4c`) fixed it.
+  Verified: `item.priority` exists with default `normal`, authenticated `GET /api/v1/items/` returns
+  HTTP 200 with priority values, and a GET with `Origin: http://localhost:5173` succeeds with CORS.
+  **Lesson:** a PBI that changes schema must explicitly migrate the running lab database after the
+  isolated/e2e validation, or the browser will test stale application state. No code defect; this is
+  workspace-state hygiene.
 - **Next safe action:** commit the application changes; start PBI 2 only after that.
 
 ---
