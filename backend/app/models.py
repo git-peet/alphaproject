@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import EmailStr
+from pydantic import EmailStr, StringConstraints
 from sqlalchemy import String
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -123,6 +124,16 @@ class ItemsPublic(SQLModel):
 CONVERSATION_TITLE_MAX_LENGTH = 255
 CONVERSATION_TRANSCRIPT_MAX_LENGTH = 20_000
 
+TRIAGE_SUMMARY_MAX_LENGTH = 1000
+TRIAGE_INTENT_MAX_LENGTH = 64
+TRIAGE_NEXT_ACTION_MAX_LENGTH = 500
+
+
+class TriageSentiment(StrEnum):
+    POSITIVE = "positive"
+    NEUTRAL = "neutral"
+    NEGATIVE = "negative"
+
 
 # Shared properties
 class ConversationBase(SQLModel):
@@ -161,6 +172,25 @@ class Conversation(ConversationBase, table=True):
         foreign_key="user.id", nullable=False, ondelete="CASCADE"
     )
     owner: User | None = Relationship(back_populates="conversations")
+    triage_summary: str | None = Field(
+        default=None,
+        max_length=TRIAGE_SUMMARY_MAX_LENGTH,
+        sa_type=String(TRIAGE_SUMMARY_MAX_LENGTH),
+    )
+    triage_intent: str | None = Field(
+        default=None,
+        max_length=TRIAGE_INTENT_MAX_LENGTH,
+        sa_type=String(TRIAGE_INTENT_MAX_LENGTH),
+    )
+    triage_sentiment: str | None = Field(
+        default=None, max_length=16, sa_type=String(16)
+    )
+    triage_next_action: str | None = Field(
+        default=None,
+        max_length=TRIAGE_NEXT_ACTION_MAX_LENGTH,
+        sa_type=String(TRIAGE_NEXT_ACTION_MAX_LENGTH),
+    )
+    triage_at: datetime | None = Field(default=None)
 
 
 # List projection, deliberately without the transcript
@@ -178,6 +208,31 @@ class ConversationPublic(ConversationBase):
     owner_id: uuid.UUID
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    triage_summary: str | None = None
+    triage_intent: str | None = None
+    triage_sentiment: TriageSentiment | None = None
+    triage_next_action: str | None = None
+    triage_at: datetime | None = None
+
+
+class ConversationTriage(SQLModel):
+    """The validated triage result contract."""
+
+    summary: str = Field(min_length=1, max_length=TRIAGE_SUMMARY_MAX_LENGTH)
+    intent: Annotated[
+        str,
+        StringConstraints(
+            min_length=1,
+            max_length=TRIAGE_INTENT_MAX_LENGTH,
+            pattern=r"^[a-z][a-z0-9_-]*$",
+        ),
+    ]
+    sentiment: TriageSentiment
+    next_action: str = Field(min_length=1, max_length=TRIAGE_NEXT_ACTION_MAX_LENGTH)
+
+
+class ConversationTriagePublic(ConversationTriage):
+    triage_at: datetime
 
 
 class ConversationsPublic(SQLModel):

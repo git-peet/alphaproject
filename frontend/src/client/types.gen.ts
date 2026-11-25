@@ -80,6 +80,23 @@ export type ConversationPublic = {
      * Updated At
      */
     updated_at?: string | null;
+    /**
+     * Triage Summary
+     */
+    triage_summary?: string | null;
+    /**
+     * Triage Intent
+     */
+    triage_intent?: string | null;
+    triage_sentiment?: TriageSentiment | null;
+    /**
+     * Triage Next Action
+     */
+    triage_next_action?: string | null;
+    /**
+     * Triage At
+     */
+    triage_at?: string | null;
 };
 
 /**
@@ -106,6 +123,29 @@ export type ConversationSummary = {
      * Updated At
      */
     updated_at?: string | null;
+};
+
+/**
+ * ConversationTriagePublic
+ */
+export type ConversationTriagePublic = {
+    /**
+     * Summary
+     */
+    summary: string;
+    /**
+     * Intent
+     */
+    intent: string;
+    sentiment: TriageSentiment;
+    /**
+     * Next Action
+     */
+    next_action: string;
+    /**
+     * Triage At
+     */
+    triage_at: string;
 };
 
 /**
@@ -281,6 +321,11 @@ export type Token = {
      */
     token_type?: string;
 };
+
+/**
+ * TriageSentiment
+ */
+export type TriageSentiment = 'positive' | 'neutral' | 'negative';
 
 /**
  * UpdatePassword
@@ -1179,6 +1224,36 @@ export type conversationsUpdateConversationResponses = {
 };
 
 export type conversationsUpdateConversationResponse = conversationsUpdateConversationResponses[keyof conversationsUpdateConversationResponses];
+
+export type conversationsTriageConversationData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{id}/triage';
+};
+
+export type conversationsTriageConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsTriageConversationError = conversationsTriageConversationErrors[keyof conversationsTriageConversationErrors];
+
+export type conversationsTriageConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationTriagePublic;
+};
+
+export type conversationsTriageConversationResponse = conversationsTriageConversationResponses[keyof conversationsTriageConversationResponses];
 
 export type privateCreateUserData = {
     body: PrivateUserCreate;

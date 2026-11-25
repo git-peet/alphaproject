@@ -12,9 +12,17 @@ from app.models import (
     ConversationPublic,
     ConversationsPublic,
     ConversationSummary,
+    ConversationTriage,
+    ConversationTriagePublic,
     ConversationUpdate,
     Message,
     get_datetime_utc,
+)
+from app.triage import (
+    TriageClientDep,
+    TriageProviderError,
+    TriageTimeoutError,
+    run_triage,
 )
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -131,6 +139,53 @@ def update_conversation(
     session.commit()
     session.refresh(conversation)
     return conversation
+
+
+@router.post("/{id}/triage", response_model=ConversationTriagePublic)
+def triage_conversation(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    triage_client: TriageClientDep,
+) -> Any:
+    """
+    Triage a conversation owned by the current user.
+
+    Each successful triage replaces the previous stored result. A failed triage
+    stores nothing and leaves any previous result intact.
+    """
+    conversation = _get_owned_conversation(
+        session=session, current_user=current_user, id=id
+    )
+    try:
+        result: ConversationTriage = run_triage(
+            client=triage_client, transcript=conversation.transcript
+        )
+    except TriageTimeoutError:
+        raise HTTPException(status_code=504, detail="Triage timed out")
+    except TriageProviderError:
+        raise HTTPException(status_code=502, detail="Triage provider failed")
+
+    triaged_at = get_datetime_utc()
+    conversation.sqlmodel_update(
+        {
+            "triage_summary": result.summary,
+            "triage_intent": result.intent,
+            "triage_sentiment": result.sentiment.value,
+            "triage_next_action": result.next_action,
+            "triage_at": triaged_at,
+        }
+    )
+    session.add(conversation)
+    session.commit()
+    return ConversationTriagePublic(
+        summary=result.summary,
+        intent=result.intent,
+        sentiment=result.sentiment,
+        next_action=result.next_action,
+        triage_at=triaged_at,
+    )
 
 
 @router.delete("/{id}")

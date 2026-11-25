@@ -1,15 +1,24 @@
+import json
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
+from app.main import app
 from app.models import (
     CONVERSATION_TRANSCRIPT_MAX_LENGTH,
     Conversation,
+    ConversationTriagePublic,
     User,
     UserUpdate,
+)
+from app.triage import (
+    TriageProviderError,
+    TriageTimeoutError,
+    get_triage_client,
 )
 from tests.utils.conversation import create_random_conversation
 from tests.utils.user import create_random_user, user_authentication_headers
@@ -242,3 +251,322 @@ def test_conversations_deleted_with_owner(db: Session) -> None:
     db.commit()
 
     assert db.get(Conversation, conversation_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Triage endpoint
+# ---------------------------------------------------------------------------
+
+TRIAGE_TRANSCRIPT_MARKER = "do-not-leak-this-transcript"
+
+
+class ScriptedTriageClient:
+    def __init__(self, responses: list[object]) -> None:
+        self._responses = responses
+        self.calls = 0
+
+    def request_triage(self, *, transcript: str) -> str:
+        self.calls += 1
+        response = self._responses[min(self.calls, len(self._responses)) - 1]
+        if isinstance(response, Exception):
+            raise response
+        return str(response)
+
+
+def _triage_payload(**overrides: str) -> str:
+    data = {
+        "summary": "Customer asks about an invoice",
+        "intent": "billing_question",
+        "sentiment": "negative",
+        "next_action": "Send the invoice",
+    }
+    data.update(overrides)
+    return json.dumps(data)
+
+
+def _owned_conversation(
+    client: TestClient, headers: dict[str, str], transcript: str
+) -> dict[str, str]:
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/",
+        headers=headers,
+        json={"title": "Triage me", "transcript": transcript},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _use_triage_client(triage_client: object) -> None:
+    app.dependency_overrides[get_triage_client] = lambda: triage_client
+
+
+def _clear_triage_override() -> None:
+    app.dependency_overrides.pop(get_triage_client, None)
+
+
+def test_triage_stores_result_and_timestamp(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    updated_at_before = conversation["updated_at"]
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"] == "Customer asks about an invoice"
+    assert body["intent"] == "billing_question"
+    assert body["sentiment"] == "negative"
+    assert body["next_action"] == "Send the invoice"
+    assert body["triage_at"]
+    ConversationTriagePublic.model_validate(body)
+
+    stored = db.get(Conversation, conversation["id"])
+    assert stored is not None
+    db.refresh(stored)
+    assert stored.triage_summary == "Customer asks about an invoice"
+    assert stored.triage_intent == "billing_question"
+    assert stored.triage_sentiment == "negative"
+    assert stored.triage_next_action == "Send the invoice"
+    assert stored.triage_at is not None
+    assert stored.updated_at is not None
+    assert stored.updated_at.isoformat().replace("+00:00", "Z") == updated_at_before
+
+
+def test_triage_result_is_readable_on_conversation(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["triage_summary"] == "Customer asks about an invoice"
+    assert body["triage_sentiment"] == "negative"
+    assert body["triage_at"]
+
+
+def test_second_triage_replaces_the_first(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        first = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        ).json()
+
+        _use_triage_client(
+            ScriptedTriageClient(
+                [_triage_payload(summary="A newer summary", sentiment="positive")]
+            )
+        )
+        second = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        ).json()
+    finally:
+        _clear_triage_override()
+
+    assert second["summary"] == "A newer summary"
+    assert second["sentiment"] == "positive"
+    assert second["triage_at"] >= first["triage_at"]
+
+    detail = client.get(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}",
+        headers=superuser_token_headers,
+    ).json()
+    assert detail["triage_summary"] == "A newer summary"
+
+
+def test_triage_retries_once_then_succeeds(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    scripted = ScriptedTriageClient([TriageProviderError("boom"), _triage_payload()])
+    _use_triage_client(scripted)
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 200
+    assert scripted.calls == 2
+
+
+def test_triage_timeout_returns_504_and_stores_nothing(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = _owned_conversation(
+        client, superuser_token_headers, TRIAGE_TRANSCRIPT_MARKER
+    )
+    _use_triage_client(ScriptedTriageClient([TriageTimeoutError("slow")]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "Triage timed out"
+    assert TRIAGE_TRANSCRIPT_MARKER not in response.text
+
+    stored = db.get(Conversation, conversation["id"])
+    assert stored is not None
+    db.refresh(stored)
+    assert stored.triage_summary is None
+    assert stored.triage_at is None
+
+
+def test_triage_invalid_payload_returns_502_and_stores_nothing(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = _owned_conversation(
+        client, superuser_token_headers, TRIAGE_TRANSCRIPT_MARKER
+    )
+    _use_triage_client(ScriptedTriageClient([_triage_payload(sentiment="furious")]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Triage provider failed"
+    assert TRIAGE_TRANSCRIPT_MARKER not in response.text
+
+    stored = db.get(Conversation, conversation["id"])
+    assert stored is not None
+    db.refresh(stored)
+    assert stored.triage_summary is None
+
+
+def test_failed_triage_preserves_previous_result(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+        _use_triage_client(ScriptedTriageClient([TriageProviderError("boom")]))
+        failed = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert failed.status_code == 502
+
+    detail = client.get(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}",
+        headers=superuser_token_headers,
+    ).json()
+    assert detail["triage_summary"] == "Customer asks about an invoice"
+
+
+def test_triage_requires_owner(
+    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = create_random_conversation(db)
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation.id}/triage",
+            headers=normal_user_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not enough permissions"
+
+
+def test_triage_denies_superuser_on_other_users_conversation(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = create_random_conversation(db)
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation.id}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 403
+
+
+def test_triage_unknown_conversation_returns_404(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{uuid.uuid4()}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found"
+
+
+def test_triage_requires_auth(client: TestClient) -> None:
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{uuid.uuid4()}/triage"
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 401
+
+
+def test_default_fake_triage_client_is_used(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["summary"] == "Fake triage summary"
+
+
+@pytest.fixture(autouse=True)
+def _clear_triage_client_override():
+    yield
+    _clear_triage_override()
