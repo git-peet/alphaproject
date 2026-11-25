@@ -1,5 +1,44 @@
 # AlphaProject — PBI backlog
 
+## Reconciliation against this codebase (2026-11-25)
+
+Checked against the pristine template at commit `c3113b6` + `176d2f0`. Facts used:
+
+- `Item` has `title`, `description`, `owner_id`, `created_at` — **no priority field**.
+- **No `Conversation` model, route, or UI exists.**
+- `read_items` already supports `skip`/`limit` (default 100) and orders by `created_at desc`.
+- 48 backend tests; Playwright e2e specs for items, login, users.
+- **Test safety gap:** `backend/tests/conftest.py` imports `engine` from `app.core.db`, i.e. the
+  configured `DATABASE_URL`. `scripts/test.sh` runs pytest against whatever database that is, and the
+  session fixture calls `init_db` then deletes `Item` and `User` rows. On this workspace that is the
+  lab's application database. The upstream template ships no isolated-test-database runner.
+
+| PBI | Verdict here | Why |
+|---|---|---|
+| PBI 0 — isolated test-database runner (new) | **ready, recommended first** | Tests currently mutate the app database; every later PBI needs a safe pytest path |
+| 1 — item priority vertical slice | **ready** | No priority field exists; migration chains from `fe56fa70289e`; gives a full stack slice |
+| 2 — Conversation storage + CRUD | **ready, larger** | Greenfield model, migration, routes, tests; foundation for 3, 4, 7, 8, 9 |
+| 3 — synchronous triage with fakeable client | **blocked by 2** | Needs a `Conversation` to triage; the fake-client boundary is the real learning goal |
+| 4 — Conversations UI | **blocked by 2 and 3** | No route or components exist yet |
+| 5 — content-free usage accounting | **deferred** | Needs an approved provider boundary; none exists |
+| 6 — asynchronous triage | **deferred** | Needs measured latency or reliability need; none yet |
+| 7 — owner-scoped search + pagination | **needs re-scope** | Written for conversations; items already paginate. Either re-target to conversations after PBI 2, or repurpose as item search |
+| 8 — export one conversation | **blocked by 2** | Needs a conversation to export |
+| 9 — structured triage feedback | **blocked by 2 and 3** | Depends on a stored triage result |
+| 10 — delivery-plan preflight validator | **not applicable here** | AgenticLab-side tooling, not application work; belongs to the payload backlog |
+
+### Suggested sequence
+
+1. **PBI 0** — isolated test-database runner with a disposable-name guard. Small, database-focused,
+   unblocks safe testing, and teaches Postgres database/role handling plus pytest fixture wiring.
+2. **PBI 1** — item priority vertical slice. First real feature: migration → schema → API → generated
+   client → UI → tests. Exercises the whole stack.
+3. **PBI 2** — Conversation model + CRUD. Then 3, 4, 7, 8, 9 in that order if the conversation
+   direction is still wanted.
+
+Nothing below this section has been changed; it is the inherited exp4 text, unmodified.
+
+---
 **Status:** `inherited reference` — restored from the exp4 delivery line (archived
 2026-11-23). Nothing in this file is implemented in this repository: AlphaProject starts from the
 pristine upstream template, so every PBI below is a candidate again.
