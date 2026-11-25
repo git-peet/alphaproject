@@ -125,9 +125,10 @@ pytest plugin, containerising the test run, or adding CI. If the script cannot w
 - **Status:** complete. Committed as `49649b1` (`backend/scripts/test-isolated.sh` + `backend/README.md`).
 - **Result:** 58 backend tests passed on a disposable database; application database remained
   `users=2, items=0`; both guards refused with exit 1; no `app_test_*` database remained after the run.
-- **Measured session:** 589 s, 84 tool calls, 7 retrieval calls, 3.96M tokens; free model so cost was
-  unavailable. Four action-scope blocks (`chmod +x` attempts outside approved scope) and one
-  knowledge-shell block occurred; none broke the task.
+- **Measured session (corrected with declared windows):** 3,205 s window, 84 tool calls, 7 retrieval
+  calls (2 applicable, 5 no_match), 3.96M tokens; free model so cost was unavailable. Four
+  action-scope blocks (`chmod +x` attempts outside approved scope) and one knowledge-shell block
+  occurred; none broke the task. Earlier figures used whole-session aggregates and were superseded.
 - **Knowledge:** two handoff candidates were staged and promoted with explicit user approval:
   `env-override-redirects-pytest-and-alembic` and `no-xtrace-with-database-url`.
 - **Workflow finding (see also `AgenticLab-v5/DEV-LOG.md` and `C04.2`):** checkpoint disposition B
@@ -193,9 +194,10 @@ Use `low`, `normal`, and `high`, with `normal` as the default. Unknown values ar
 - **Recovery:** the lab servers were restarted afterwards; backend :8000 and frontend :5173 both
   returned HTTP 200 and the application database was healthy. Do not treat the absence of the UI
   during that interval as a database failure.
-- **Measured session:** 31,521 s window (includes a long blocked interval), 204 tool calls, 17
-  retrieval calls (6 applicable, 11 no_match), 19.5M tokens; free model so cost was unavailable.
-  Gate blocks: 6 action-scope, 3 knowledge-shell; none broke the task.
+- **Measured session (corrected with declared windows):** 29,608 s window (includes a long blocked
+  interval), 120 tool calls, 10 retrieval calls (4 applicable, 6 no_match), 15.5M tokens; free model
+  so cost was unavailable. Gate blocks: 2 action-scope, 2 knowledge-shell; none broke the task.
+  Earlier whole-session figures were superseded.
 - **Knowledge:** both checkpoint handoffs were staged and promoted with explicit user approval:
   `client-generation-script-side-effects` and `playwright-compose-targets-app-database`.
 - **Workflow finding:** following the lab instruction, the implementation log was written **before**
@@ -243,6 +245,30 @@ As a signed-in user, I want to create and manage conversations that I own, so th
 - Add an Alembic migration and focused API/service tests for CRUD, validation, ownership isolation, and deletion behavior.
 - Use an isolated disposable test database. Do not read `.env`, inspect an existing database, or run migrations against a shared database.
 - Do not log transcript text or include it in error messages.
+
+### Run record — 2026-11-25
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** single Alembic head `8c1f4a2d6b70`; 18 conversation-focused tests and 81 full isolated
+  backend tests passed; client regenerated (`ConversationsService`) and `bun run build` passed;
+  Playwright items regression 11/11 on a disposable stack at ports 8100/5273.
+- **Lab database:** migrated additively from `7b3d9e2f1a4c` to `8c1f4a2d6b70`; `conversation`
+  table created with `title VARCHAR(255)`, `transcript VARCHAR(20000)`, cascade FK. Existing rows
+  preserved (`users=10, items=4` at review).
+- **Behaviour:** owner-only CRUD; superusers denied cross-user access; 404 for missing resources;
+  oversized transcript rejected with fixed 422 and no transcript echo; conversation rows cascade
+  with owner deletion.
+- **Measured session:** 445 s, 68 tool calls, 7 retrieval calls (1 applicable, 6 no_match),
+  11.0M tokens, $0.0868, model `deepseek-v4.1-flash` (first paid-model lab PBI). Gate blocks: 2
+  action-scope, 1 knowledge-shell, 1 sensitive-path; none broke the task.
+- **Knowledge:** one handoff promoted after explicit approval:
+  `fastapi-422-echoes-submitted-input`. Pending queue empty. Retrieval of that record was relevant to
+  the no-transcript-echo requirement and is the strongest knowledge-use signal so far in the lab.
+- **Workflow:** implementation log written before checkpoint disposition; B then deleted the
+  checkpoint without a gate conflict. The prompt-ordering fix remains proposed, not applied.
+- **Naming:** the migration was created with the correct Alembic filename
+  `8c1f4a2d6b70_add_conversation.py`; the PBI 1 placeholder lesson was applied.
+- **Next safe action:** commit the application changes; start PBI 3 only after that.
 
 ---
 
