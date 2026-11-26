@@ -1287,6 +1287,34 @@ export type conversationsUpdateConversationResponses = {
 
 export type conversationsUpdateConversationResponse = conversationsUpdateConversationResponses[keyof conversationsUpdateConversationResponses];
 
+export type conversationsExportConversationData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{id}/export';
+};
+
+export type conversationsExportConversationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsExportConversationError = conversationsExportConversationErrors[keyof conversationsExportConversationErrors];
+
+export type conversationsExportConversationResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type conversationsTriageConversationData = {
     body?: never;
     path: {

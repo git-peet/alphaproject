@@ -126,6 +126,10 @@ $ alembic upgrade head
 
 If you don't want to start with the default models and want to remove them / modify them, from the beginning, without having any previous revision, you can remove the revision files (`.py` Python files) under `./backend/app/alembic/versions/`. And then create a first migration as described above.
 
+## Conversation Export
+
+`GET /api/v1/conversations/{id}/export` returns one conversation owned by the caller as a downloadable JSON document (`Content-Disposition: attachment; filename="conversation-<id>.json"`). The document is versioned (`"format": "conversation-export"`, `"version": 1`) and contains only the conversation `id`, `title`, `transcript`, `created_at`, `updated_at`, and the current triage result (`summary`, `intent`, `sentiment`, `next_action`, `triage_at`) or `null`. The owner id is deliberately omitted. Cross-user access follows the normal conversation rules (403 for a non-owner, including superusers, and 404 for an unknown id), and a document whose encoded body exceeds 64 KiB is refused with 413 rather than truncated.
+
 ## Email Templates
 
 The email templates are written with [React Email](https://react.email) in `./packages/react-email/`. The `emails` directory holds one component per email and the `ui` directory holds the shared components (layout, heading, button, link, callout).

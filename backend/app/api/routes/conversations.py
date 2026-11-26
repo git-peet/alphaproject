@@ -1,8 +1,9 @@
+import json
 import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -30,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 MAX_CONVERSATION_PAGE_SIZE = 100
 CONVERSATION_SEARCH_MAX_LENGTH = 100
+
+EXPORT_FORMAT = "conversation-export"
+EXPORT_VERSION = 1
+MAX_EXPORT_BYTES = 64 * 1024
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -181,6 +186,68 @@ def update_conversation(
     session.commit()
     session.refresh(conversation)
     return conversation
+
+
+@router.get("/{id}/export")
+def export_conversation(
+    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Response:
+    """
+    Export one owned conversation as a downloadable JSON document.
+
+    The document includes only explicitly selected fields: the conversation id,
+    title, transcript and timestamps plus the current triage metadata. The owner
+    id is deliberately excluded. Export never mutates the stored conversation and
+    never logs its content.
+    """
+    conversation = _get_owned_conversation(
+        session=session, current_user=current_user, id=id
+    )
+
+    triage: dict[str, Any] | None = None
+    if conversation.triage_at is not None:
+        triage = {
+            "summary": conversation.triage_summary,
+            "intent": conversation.triage_intent,
+            "sentiment": conversation.triage_sentiment,
+            "next_action": conversation.triage_next_action,
+            "triage_at": conversation.triage_at.isoformat(),
+        }
+
+    document = {
+        "format": EXPORT_FORMAT,
+        "version": EXPORT_VERSION,
+        "exported_at": get_datetime_utc().isoformat(),
+        "conversation": {
+            "id": str(conversation.id),
+            "title": conversation.title,
+            "transcript": conversation.transcript,
+            "created_at": conversation.created_at.isoformat()
+            if conversation.created_at
+            else None,
+            "updated_at": conversation.updated_at.isoformat()
+            if conversation.updated_at
+            else None,
+        },
+        "triage": triage,
+    }
+
+    body = json.dumps(document, ensure_ascii=False).encode("utf-8")
+    if len(body) > MAX_EXPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="This conversation is too large to export",
+        )
+
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="conversation-{conversation.id}.json"'
+            )
+        },
+    )
 
 
 @router.post("/{id}/triage", response_model=ConversationTriagePublic)

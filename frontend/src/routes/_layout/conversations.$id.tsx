@@ -5,6 +5,7 @@ import { Suspense } from "react"
 
 import { ConversationsService } from "@/client"
 import DeleteConversation from "@/components/Conversations/DeleteConversation"
+import ExportConversation from "@/components/Conversations/ExportConversation"
 import TriageSection from "@/components/Conversations/TriageSection"
 import { Button } from "@/components/ui/button"
 import {
@@ -62,11 +63,14 @@ function ConversationDetailContent({
               : "—"}
           </p>
         </div>
-        <DeleteConversation
-          id={conversation.id}
-          userId={userId}
-          onSuccess={() => navigate({ to: "/conversations" })}
-        />
+        <div className="flex items-center gap-2">
+          <ExportConversation id={conversation.id} />
+          <DeleteConversation
+            id={conversation.id}
+            userId={userId}
+            onSuccess={() => navigate({ to: "/conversations" })}
+          />
+        </div>
       </div>
 
       <Card>

@@ -934,3 +934,168 @@ def test_usage_recording_failure_does_not_block_triage(
 
     db.expire_all()
     assert _usage_rows(db) == []
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+EXPORT_KEYS = {"format", "version", "exported_at", "conversation", "triage"}
+EXPORT_CONVERSATION_KEYS = {"id", "title", "transcript", "created_at", "updated_at"}
+EXPORT_TRIAGE_KEYS = {"summary", "intent", "sentiment", "next_action", "triage_at"}
+
+
+def test_export_returns_documented_json_shape(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    created = _create_conversation(client, superuser_token_headers, "Export me")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/export",
+        headers=superuser_token_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith("attachment;")
+    assert f'filename="conversation-{created["id"]}.json"' in disposition
+
+    document = json.loads(response.content)
+    assert set(document) == EXPORT_KEYS
+    assert document["format"] == "conversation-export"
+    assert document["version"] == 1
+    assert document["exported_at"]
+    assert set(document["conversation"]) == EXPORT_CONVERSATION_KEYS
+    assert document["conversation"]["id"] == created["id"]
+    assert document["conversation"]["title"] == "Export me"
+    assert document["conversation"]["transcript"] == "Transcript body"
+    assert document["triage"] is None
+    assert "owner_id" not in response.text
+
+
+def test_export_includes_current_triage_metadata(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    created = _create_conversation(client, superuser_token_headers, "Triaged export")
+    triaged = client.post(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/triage",
+        headers=superuser_token_headers,
+    )
+    assert triaged.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/export",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+    document = json.loads(response.content)
+    assert document["triage"] is not None
+    assert set(document["triage"]) == EXPORT_TRIAGE_KEYS
+    assert document["triage"]["summary"] == "Fake triage summary"
+    assert document["triage"]["sentiment"] == "neutral"
+    assert document["triage"]["triage_at"]
+
+
+def test_export_requires_ownership(client: TestClient, db: Session) -> None:
+    owner_headers = _headers_for(client, db)
+    created = _create_conversation(client, owner_headers, "Private export")
+
+    other_headers = _headers_for(client, db)
+    other = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/export",
+        headers=other_headers,
+    )
+    assert other.status_code == 403
+    assert "Private export" not in other.text
+
+
+def test_superuser_cannot_export_another_users_conversation(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = create_random_conversation(db)
+    response = client.get(
+        f"{settings.API_V1_STR}/conversations/{conversation.id}/export",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 403
+    assert conversation.transcript not in response.text
+
+
+def test_export_unknown_conversation_returns_404(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/conversations/{uuid.uuid4()}/export",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found"
+
+
+def test_export_requires_authentication(client: TestClient) -> None:
+    response = client.get(f"{settings.API_V1_STR}/conversations/{uuid.uuid4()}/export")
+    assert response.status_code == 401
+
+
+def test_export_rejects_oversized_document(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    # 20000 emoji characters pass the character limit but exceed the 64 KiB
+    # encoded-body cap once serialized as UTF-8.
+    transcript = "\U0001F600" * 20_000
+    created = client.post(
+        f"{settings.API_V1_STR}/conversations/",
+        headers=superuser_token_headers,
+        json={"title": "Huge export", "transcript": transcript},
+    )
+    assert created.status_code == 200
+    conversation_id = created.json()["id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/conversations/{conversation_id}/export",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "This conversation is too large to export"
+    assert "\U0001F600" not in response.text
+
+
+def test_export_does_not_mutate_the_conversation(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    created = _create_conversation(client, superuser_token_headers, "Read only")
+    client.post(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/triage",
+        headers=superuser_token_headers,
+    )
+
+    before = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}",
+        headers=superuser_token_headers,
+    ).json()
+
+    export = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/export",
+        headers=superuser_token_headers,
+    )
+    assert export.status_code == 200
+
+    after = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}",
+        headers=superuser_token_headers,
+    ).json()
+    for field in (
+        "title",
+        "transcript",
+        "created_at",
+        "updated_at",
+        "triage_summary",
+        "triage_at",
+    ):
+        assert before[field] == after[field]
+
+    db.expire_all()
+    stored = db.get(Conversation, created["id"])
+    assert stored is not None
+    assert stored.transcript == "Transcript body"

@@ -309,3 +309,105 @@ test.describe("Conversation search and pagination", () => {
     await expect(page.getByRole("button", { name: "Previous" })).toBeDisabled()
   })
 })
+
+test.describe("Conversation export", () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  const seedConversation = async (
+    request: import("@playwright/test").APIRequestContext,
+    email: string,
+    password: string,
+    title: string,
+  ): Promise<string> => {
+    const apiBase = process.env.VITE_API_URL ?? ""
+    const tokenResponse = await request.post(
+      `${apiBase}/api/v1/login/access-token`,
+      { form: { username: email, password } },
+    )
+    expect(tokenResponse.ok()).toBeTruthy()
+    const { access_token } = await tokenResponse.json()
+    const created = await request.post(`${apiBase}/api/v1/conversations/`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+      data: { title, transcript: "Exported transcript" },
+    })
+    expect(created.ok()).toBeTruthy()
+    const body = await created.json()
+    return body.id as string
+  }
+
+  test("Export downloads a documented JSON document", async ({
+    page,
+    request,
+  }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    const title = randomConversationTitle()
+    await createUser({ email, password })
+    const conversationId = await seedConversation(
+      request,
+      email,
+      password,
+      title,
+    )
+    await logInUser(page, email, password)
+    await page.goto(`/conversations/${conversationId}`)
+
+    const downloadPromise = page.waitForEvent("download")
+    await page.getByRole("button", { name: "Export" }).click()
+    const download = await downloadPromise
+
+    expect(download.suggestedFilename()).toBe(
+      `conversation-${conversationId}.json`,
+    )
+
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) {
+      chunks.push(Buffer.from(chunk))
+    }
+    const document = JSON.parse(Buffer.concat(chunks).toString("utf-8"))
+
+    expect(document.format).toBe("conversation-export")
+    expect(document.version).toBe(1)
+    expect(Object.keys(document).sort()).toEqual(
+      ["conversation", "exported_at", "format", "triage", "version"].sort(),
+    )
+    expect(document.conversation.title).toBe(title)
+    expect(document.conversation.transcript).toBe("Exported transcript")
+    expect(document.triage).toBeNull()
+    expect(JSON.stringify(document)).not.toContain("owner_id")
+  })
+
+  test("A rejected export shows an error and downloads nothing", async ({
+    page,
+    request,
+  }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    const conversationId = await seedConversation(
+      request,
+      email,
+      password,
+      randomConversationTitle(),
+    )
+    await logInUser(page, email, password)
+    await page.goto(`/conversations/${conversationId}`)
+
+    await page.route(`**/conversations/${conversationId}/export`, (route) =>
+      route.fulfill({
+        status: 413,
+        contentType: "application/json",
+        body: JSON.stringify({
+          detail: "This conversation is too large to export",
+        }),
+      }),
+    )
+
+    await page.getByRole("button", { name: "Export" }).click()
+
+    await expect(
+      page.getByText("This conversation is too large to export"),
+    ).toBeVisible()
+  })
+})
