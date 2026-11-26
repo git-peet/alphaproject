@@ -454,6 +454,30 @@ As a signed-in user with many conversations, I want to search and navigate my co
 - Add backend tests for filtering, pagination boundaries, stable ordering, and cross-owner isolation, plus focused UI tests.
 - Do not log raw search text or return another user's conversations.
 
+### Run record — 2026-11-26
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** 45 focused conversation tests and 129 full isolated backend tests passed; client
+  regenerated with `search`; `bun run build` and lint passed; Playwright conversations + items suites
+  **21/21** on a disposable stack. No leftover databases; app rows unchanged
+  (`users=10, items=4, conversations=0`).
+- **Behaviour:** owner-scoped case-insensitive title search with literal `%`/`_` handling and a
+  100-character cap; `skip`/`limit` with 1..100 and filtered counts; deterministic
+  `created_at desc, id desc` ordering; UI search form with submit/clear, 10-row pages, no-match
+  state, and page reset on new search.
+- **Fixes during the run:** the search input's accessible name was changed after it broke
+  `getByLabel("Title")`; two heading assertions were made exact to distinguish page title from empty
+  state. One unchanged delete-test `Page crashed` flake passed on rerun.
+- **Measured session:** 524 s, 57 tool calls, 4 retrieval calls (3 applicable, 1 no_match), 24.1M
+  tokens, $0.1064, model `deepseek-v4.1-flash`, tagged `ALPHA-DELIVERY-R1`. Gate blocks: 1
+  action-scope; no task break.
+- **Knowledge:** one verified finding staged and promoted with explicit user approval:
+  `playwright-text-locators-match-substrings`. Pending queue empty. The C03 marker was carried as
+  metadata only; no evaluation card artifact was added.
+- **Workflow:** implementation log written before checkpoint disposition; B then deleted the
+  checkpoint cleanly.
+- **Next safe action:** commit the application changes; start PBI 8 only after that.
+
 ---
 
 ## PBI 8 — Export an owned conversation
