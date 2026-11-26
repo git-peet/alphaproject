@@ -495,6 +495,27 @@ As a signed-in user, I want to download a copy of a conversation I own, so that 
 - Add tests for format, size limits, ownership isolation, and absence of database mutation.
 - Bulk export, import, external storage, and scheduled retention are out of scope.
 
+### Run record — 2026-11-26
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** backend export tests and full isolated suite passed; client regenerated; build, lint,
+  and Playwright conversations + items suites **23/23** on a disposable stack. No leftover databases;
+  app rows unchanged (`users=10, items=4, conversations=0`).
+- **Behaviour:** versioned JSON export with only `id`, `title`, `transcript`, timestamps, and current
+  triage metadata; `owner_id` excluded. Safe `attachment; filename="conversation-<uuid>.json"`,
+  existing 403/404 ownership policy with no superuser bypass, 64 KiB cap returning generic 413, and
+  read-only handling with no transcript/triage logging.
+- **Measured session:** 425 s, 48 tool calls, 4 retrieval calls (1 applicable, 3 no_match), 24.2M
+  tokens, $0.0941, model `deepseek-v4.1-flash`, tagged `ALPHA-DELIVERY-R1`. Gate blocks: 1
+  action-scope, 1 knowledge-shell; no task break.
+- **Knowledge:** one verified finding staged and promoted with explicit user approval:
+  `bearer-auth-blocks-plain-download-links`. Pending queue empty. Format/limit decisions stayed
+  task-local.
+- **Workflow:** implementation log written before checkpoint disposition; B then deleted the
+  checkpoint cleanly.
+- **Next safe action:** commit the application changes; PBI 9 remains the final candidate PBI in this
+  sequence.
+
 ---
 
 ## PBI 9 — Capture structured feedback on triage results
