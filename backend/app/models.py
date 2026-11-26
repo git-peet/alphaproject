@@ -145,6 +145,14 @@ class TriageSentiment(StrEnum):
     NEGATIVE = "negative"
 
 
+class TriageFeedback(StrEnum):
+    HELPFUL = "helpful"
+    NOT_HELPFUL = "not_helpful"
+
+
+TRIAGE_FEEDBACK_MAX_LENGTH = 16
+
+
 # Shared properties
 class ConversationBase(SQLModel):
     title: str = Field(min_length=1, max_length=CONVERSATION_TITLE_MAX_LENGTH)
@@ -201,6 +209,12 @@ class Conversation(ConversationBase, table=True):
         sa_type=String(TRIAGE_NEXT_ACTION_MAX_LENGTH),
     )
     triage_at: datetime | None = Field(default=None)
+    triage_feedback: str | None = Field(
+        default=None,
+        max_length=TRIAGE_FEEDBACK_MAX_LENGTH,
+        sa_type=String(TRIAGE_FEEDBACK_MAX_LENGTH),
+    )
+    triage_feedback_at: datetime | None = Field(default=None)
 
 
 # List projection, deliberately without the transcript
@@ -223,6 +237,17 @@ class ConversationPublic(ConversationBase):
     triage_sentiment: TriageSentiment | None = None
     triage_next_action: str | None = None
     triage_at: datetime | None = None
+    triage_feedback: TriageFeedback | None = None
+    triage_feedback_at: datetime | None = None
+
+
+class TriageFeedbackUpdate(SQLModel):
+    feedback: TriageFeedback
+
+
+class ConversationTriageFeedbackPublic(SQLModel):
+    feedback: TriageFeedback | None = None
+    feedback_at: datetime | None = None
 
 
 class ConversationTriage(SQLModel):

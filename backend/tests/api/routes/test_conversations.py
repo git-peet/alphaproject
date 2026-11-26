@@ -12,6 +12,7 @@ from app.models import (
     CONVERSATION_TRANSCRIPT_MAX_LENGTH,
     Conversation,
     ConversationTriagePublic,
+    TriageFeedback,
     TriageUsage,
     TriageUsageOutcome,
     User,
@@ -1099,3 +1100,266 @@ def test_export_does_not_mutate_the_conversation(
     stored = db.get(Conversation, created["id"])
     assert stored is not None
     assert stored.transcript == "Transcript body"
+
+
+# ---------------------------------------------------------------------------
+# Triage feedback
+# ---------------------------------------------------------------------------
+
+
+def _triaged_conversation(
+    client: TestClient, headers: dict[str, str], title: str
+) -> dict[str, str]:
+    created = _create_conversation(client, headers, title)
+    triaged = client.post(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/triage",
+        headers=headers,
+    )
+    assert triaged.status_code == 200
+    return created
+
+
+def _feedback_url(conversation_id: str) -> str:
+    return f"{settings.API_V1_STR}/conversations/{conversation_id}/triage/feedback"
+
+
+def test_set_triage_feedback(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    created = _triaged_conversation(
+        client, superuser_token_headers, "Rate this triage"
+    )
+
+    response = client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "helpful"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["feedback"] == "helpful"
+    assert body["feedback_at"]
+
+    db.expire_all()
+    stored = db.get(Conversation, created["id"])
+    assert stored is not None
+    assert TriageFeedback(stored.triage_feedback) is TriageFeedback.HELPFUL
+    assert stored.triage_feedback_at is not None
+
+
+def test_replace_triage_feedback(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    created = _triaged_conversation(
+        client, superuser_token_headers, "Change my mind"
+    )
+    client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "helpful"},
+    )
+
+    response = client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "not_helpful"},
+    )
+    assert response.status_code == 200
+    assert response.json()["feedback"] == "not_helpful"
+
+    db.expire_all()
+    stored = db.get(Conversation, created["id"])
+    assert stored is not None
+    assert TriageFeedback(stored.triage_feedback) is TriageFeedback.NOT_HELPFUL
+
+
+def test_clear_triage_feedback_is_idempotent(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    created = _triaged_conversation(
+        client, superuser_token_headers, "Clear my rating"
+    )
+    client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "helpful"},
+    )
+
+    first = client.delete(
+        _feedback_url(created["id"]), headers=superuser_token_headers
+    )
+    assert first.status_code == 200
+    assert first.json()["feedback"] is None
+    assert first.json()["feedback_at"] is None
+
+    second = client.delete(
+        _feedback_url(created["id"]), headers=superuser_token_headers
+    )
+    assert second.status_code == 200
+    assert second.json()["feedback"] is None
+
+    db.expire_all()
+    stored = db.get(Conversation, created["id"])
+    assert stored is not None
+    assert stored.triage_feedback is None
+    assert stored.triage_feedback_at is None
+
+
+def test_feedback_requires_a_triage_result(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    created = _create_conversation(
+        client, superuser_token_headers, "Never triaged"
+    )
+
+    response = client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "helpful"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "No triage result to rate"
+
+    db.expire_all()
+    stored = db.get(Conversation, created["id"])
+    assert stored is not None
+    assert stored.triage_feedback is None
+
+
+def test_feedback_rejects_unknown_value(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    created = _triaged_conversation(
+        client, superuser_token_headers, "Bad rating"
+    )
+
+    response = client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "amazing"},
+    )
+    assert response.status_code == 422
+
+
+def test_feedback_requires_owner(
+    client: TestClient, db: Session
+) -> None:
+    owner_headers = _headers_for(client, db)
+    created = _triaged_conversation(client, owner_headers, "Owned rating")
+
+    other_headers = _headers_for(client, db)
+    response = client.put(
+        _feedback_url(created["id"]),
+        headers=other_headers,
+        json={"feedback": "helpful"},
+    )
+    assert response.status_code == 403
+
+    cleared = client.delete(
+        _feedback_url(created["id"]), headers=other_headers
+    )
+    assert cleared.status_code == 403
+
+
+def test_superuser_cannot_rate_another_users_conversation(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = create_random_conversation(db)
+    response = client.put(
+        _feedback_url(str(conversation.id)),
+        headers=superuser_token_headers,
+        json={"feedback": "helpful"},
+    )
+    assert response.status_code == 403
+
+
+def test_feedback_unknown_conversation_returns_404(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.put(
+        _feedback_url(str(uuid.uuid4())),
+        headers=superuser_token_headers,
+        json={"feedback": "helpful"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found"
+
+
+def test_feedback_requires_authentication(client: TestClient) -> None:
+    response = client.put(
+        _feedback_url(str(uuid.uuid4())), json={"feedback": "helpful"}
+    )
+    assert response.status_code == 401
+
+
+def test_retriage_clears_feedback_but_transcript_edit_keeps_it(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    created = _triaged_conversation(
+        client, superuser_token_headers, "Staleness rules"
+    )
+    client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "helpful"},
+    )
+
+    edited = client.put(
+        f"{settings.API_V1_STR}/conversations/{created['id']}",
+        headers=superuser_token_headers,
+        json={"title": "Renamed only"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["triage_feedback"] == "helpful"
+
+    retriaged = client.post(
+        f"{settings.API_V1_STR}/conversations/{created['id']}/triage",
+        headers=superuser_token_headers,
+    )
+    assert retriaged.status_code == 200
+
+    detail = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}",
+        headers=superuser_token_headers,
+    ).json()
+    assert detail["triage_feedback"] is None
+    assert detail["triage_feedback_at"] is None
+
+
+def test_feedback_does_not_change_the_triage_result_or_usage(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    created = _triaged_conversation(
+        client, superuser_token_headers, "Result stays put"
+    )
+    before = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}",
+        headers=superuser_token_headers,
+    ).json()
+
+    db.expire_all()
+    usage_before = len(_usage_rows(db))
+
+    client.put(
+        _feedback_url(created["id"]),
+        headers=superuser_token_headers,
+        json={"feedback": "not_helpful"},
+    )
+
+    after = client.get(
+        f"{settings.API_V1_STR}/conversations/{created['id']}",
+        headers=superuser_token_headers,
+    ).json()
+    for field in (
+        "triage_summary",
+        "triage_intent",
+        "triage_sentiment",
+        "triage_next_action",
+        "triage_at",
+    ):
+        assert before[field] == after[field]
+
+    db.expire_all()
+    assert len(_usage_rows(db)) == usage_before

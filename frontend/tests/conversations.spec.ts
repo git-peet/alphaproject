@@ -411,3 +411,108 @@ test.describe("Conversation export", () => {
     ).toBeVisible()
   })
 })
+
+test.describe("Triage feedback", () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  const apiBase = () => process.env.VITE_API_URL ?? ""
+
+  const seedTriagedConversation = async (
+    request: import("@playwright/test").APIRequestContext,
+    email: string,
+    password: string,
+    title: string,
+    triage: boolean,
+  ): Promise<string> => {
+    const tokenResponse = await request.post(
+      `${apiBase()}/api/v1/login/access-token`,
+      { form: { username: email, password } },
+    )
+    expect(tokenResponse.ok()).toBeTruthy()
+    const { access_token } = await tokenResponse.json()
+    const headers = { Authorization: `Bearer ${access_token}` }
+
+    const created = await request.post(`${apiBase()}/api/v1/conversations/`, {
+      headers,
+      data: { title, transcript: "Feedback transcript" },
+    })
+    expect(created.ok()).toBeTruthy()
+    const body = await created.json()
+
+    if (triage) {
+      const triaged = await request.post(
+        `${apiBase()}/api/v1/conversations/${body.id}/triage`,
+        { headers },
+      )
+      expect(triaged.ok()).toBeTruthy()
+    }
+
+    return body.id as string
+  }
+
+  test("Rate, replace, and clear feedback on a triage result", async ({
+    page,
+    request,
+  }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    const conversationId = await seedTriagedConversation(
+      request,
+      email,
+      password,
+      randomConversationTitle(),
+      true,
+    )
+    await logInUser(page, email, password)
+    await page.goto(`/conversations/${conversationId}`)
+
+    await expect(page.getByText("Fake triage summary")).toBeVisible()
+    await expect(page.getByText("Was this triage useful?")).toBeVisible()
+
+    await page.getByRole("button", { name: "Helpful", exact: true }).click()
+    await expect(page.getByText("Feedback saved")).toBeVisible()
+    await expect(
+      page.getByText("Your feedback on this result: Helpful"),
+    ).toBeVisible()
+
+    await page.getByRole("button", { name: "Not helpful", exact: true }).click()
+    await expect(
+      page.getByText("Your feedback on this result: Not helpful"),
+    ).toBeVisible()
+    await expect(page.getByText("Fake triage summary")).toBeVisible()
+
+    await page.getByRole("button", { name: "Clear feedback" }).click()
+    await expect(page.getByText("Feedback cleared")).toBeVisible()
+    await expect(page.getByText("Your feedback on this result")).toHaveCount(0)
+    await expect(
+      page.getByText("It is not sent to any external service."),
+    ).toBeVisible()
+  })
+
+  test("Feedback controls are hidden without a triage result", async ({
+    page,
+    request,
+  }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    const conversationId = await seedTriagedConversation(
+      request,
+      email,
+      password,
+      randomConversationTitle(),
+      false,
+    )
+    await logInUser(page, email, password)
+    await page.goto(`/conversations/${conversationId}`)
+
+    await expect(page.getByText("No triage yet. Run triage")).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Helpful", exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole("button", { name: "Clear feedback" }),
+    ).toHaveCount(0)
+  })
+})

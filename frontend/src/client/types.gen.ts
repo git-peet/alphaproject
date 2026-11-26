@@ -97,6 +97,11 @@ export type ConversationPublic = {
      * Triage At
      */
     triage_at?: string | null;
+    triage_feedback?: TriageFeedback | null;
+    /**
+     * Triage Feedback At
+     */
+    triage_feedback_at?: string | null;
 };
 
 /**
@@ -123,6 +128,17 @@ export type ConversationSummary = {
      * Updated At
      */
     updated_at?: string | null;
+};
+
+/**
+ * ConversationTriageFeedbackPublic
+ */
+export type ConversationTriageFeedbackPublic = {
+    feedback?: TriageFeedback | null;
+    /**
+     * Feedback At
+     */
+    feedback_at?: string | null;
 };
 
 /**
@@ -320,6 +336,18 @@ export type Token = {
      * Token Type
      */
     token_type?: string;
+};
+
+/**
+ * TriageFeedback
+ */
+export type TriageFeedback = 'helpful' | 'not_helpful';
+
+/**
+ * TriageFeedbackUpdate
+ */
+export type TriageFeedbackUpdate = {
+    feedback: TriageFeedback;
 };
 
 /**
@@ -1344,6 +1372,66 @@ export type conversationsTriageConversationResponses = {
 };
 
 export type conversationsTriageConversationResponse = conversationsTriageConversationResponses[keyof conversationsTriageConversationResponses];
+
+export type conversationsClearTriageFeedbackData = {
+    body?: never;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{id}/triage/feedback';
+};
+
+export type conversationsClearTriageFeedbackErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsClearTriageFeedbackError = conversationsClearTriageFeedbackErrors[keyof conversationsClearTriageFeedbackErrors];
+
+export type conversationsClearTriageFeedbackResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationTriageFeedbackPublic;
+};
+
+export type conversationsClearTriageFeedbackResponse = conversationsClearTriageFeedbackResponses[keyof conversationsClearTriageFeedbackResponses];
+
+export type conversationsSetTriageFeedbackData = {
+    body: TriageFeedbackUpdate;
+    path: {
+        /**
+         * Id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{id}/triage/feedback';
+};
+
+export type conversationsSetTriageFeedbackErrors = {
+    /**
+     * Validation Error
+     */
+    422: HTTPValidationError;
+};
+
+export type conversationsSetTriageFeedbackError = conversationsSetTriageFeedbackErrors[keyof conversationsSetTriageFeedbackErrors];
+
+export type conversationsSetTriageFeedbackResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationTriageFeedbackPublic;
+};
+
+export type conversationsSetTriageFeedbackResponse = conversationsSetTriageFeedbackResponses[keyof conversationsSetTriageFeedbackResponses];
 
 export type triageUsageReadTriageUsageData = {
     body?: never;

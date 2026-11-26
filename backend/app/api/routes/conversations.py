@@ -14,9 +14,11 @@ from app.models import (
     ConversationPublic,
     ConversationsPublic,
     ConversationSummary,
+    ConversationTriageFeedbackPublic,
     ConversationTriagePublic,
     ConversationUpdate,
     Message,
+    TriageFeedbackUpdate,
     TriageUsage,
     get_datetime_utc,
 )
@@ -288,6 +290,9 @@ def triage_conversation(
             "triage_sentiment": result.sentiment.value,
             "triage_next_action": result.next_action,
             "triage_at": triaged_at,
+            # Feedback rated a result that no longer exists after re-triage.
+            "triage_feedback": None,
+            "triage_feedback_at": None,
         }
     )
     session.add(conversation)
@@ -300,6 +305,61 @@ def triage_conversation(
         next_action=result.next_action,
         triage_at=triaged_at,
     )
+
+
+@router.put(
+    "/{id}/triage/feedback", response_model=ConversationTriageFeedbackPublic
+)
+def set_triage_feedback(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    id: uuid.UUID,
+    feedback_in: TriageFeedbackUpdate,
+) -> Any:
+    """
+    Rate the current triage result of a conversation owned by the current user.
+
+    Feedback never changes the triage result itself.
+    """
+    conversation = _get_owned_conversation(
+        session=session, current_user=current_user, id=id
+    )
+    if conversation.triage_at is None:
+        raise HTTPException(status_code=409, detail="No triage result to rate")
+
+    feedback_at = get_datetime_utc()
+    conversation.sqlmodel_update(
+        {
+            "triage_feedback": feedback_in.feedback.value,
+            "triage_feedback_at": feedback_at,
+        }
+    )
+    session.add(conversation)
+    session.commit()
+    return ConversationTriageFeedbackPublic(
+        feedback=feedback_in.feedback, feedback_at=feedback_at
+    )
+
+
+@router.delete(
+    "/{id}/triage/feedback", response_model=ConversationTriageFeedbackPublic
+)
+def clear_triage_feedback(
+    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
+    """
+    Clear the feedback on the current triage result. Safe to repeat.
+    """
+    conversation = _get_owned_conversation(
+        session=session, current_user=current_user, id=id
+    )
+    conversation.sqlmodel_update(
+        {"triage_feedback": None, "triage_feedback_at": None}
+    )
+    session.add(conversation)
+    session.commit()
+    return ConversationTriageFeedbackPublic(feedback=None, feedback_at=None)
 
 
 @router.delete("/{id}")

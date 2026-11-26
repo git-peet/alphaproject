@@ -1,8 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Sparkles } from "lucide-react"
 
-import { type ConversationPublic, ConversationsService } from "@/client"
+import {
+  type ConversationPublic,
+  ConversationsService,
+  type TriageFeedback,
+} from "@/client"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -52,6 +57,43 @@ const TriageSection = ({ conversation, userId }: TriageSectionProps) => {
       queryClient.invalidateQueries({ queryKey: ["conversations", userId] })
     },
   })
+
+  const feedbackMutation = useMutation({
+    mutationFn: (feedback: TriageFeedback) =>
+      ConversationsService.setTriageFeedback({
+        path: { id: conversation.id },
+        body: { feedback },
+      }),
+    onSuccess: () => {
+      showSuccessToast("Feedback saved")
+    },
+    onError: handleError.bind(showErrorToast),
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversations", userId, conversation.id],
+      })
+    },
+  })
+
+  const clearFeedbackMutation = useMutation({
+    mutationFn: () =>
+      ConversationsService.clearTriageFeedback({
+        path: { id: conversation.id },
+      }),
+    onSuccess: () => {
+      showSuccessToast("Feedback cleared")
+    },
+    onError: handleError.bind(showErrorToast),
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversations", userId, conversation.id],
+      })
+    },
+  })
+
+  const feedback = conversation.triage_feedback ?? null
+  const feedbackPending =
+    feedbackMutation.isPending || clearFeedbackMutation.isPending
 
   return (
     <Card>
@@ -119,6 +161,48 @@ const TriageSection = ({ conversation, userId }: TriageSectionProps) => {
                 {conversation.triage_at
                   ? new Date(conversation.triage_at).toLocaleString()
                   : "—"}
+              </dd>
+            </div>
+            <div className="border-t pt-4">
+              <dt className="text-sm font-medium">Was this triage useful?</dt>
+              <dd className="mt-2 flex flex-wrap items-center gap-2">
+                <LoadingButton
+                  size="sm"
+                  variant={feedback === "helpful" ? "default" : "outline"}
+                  loading={feedbackMutation.isPending && feedback !== "helpful"}
+                  disabled={feedbackPending}
+                  onClick={() => feedbackMutation.mutate("helpful")}
+                >
+                  Helpful
+                </LoadingButton>
+                <LoadingButton
+                  size="sm"
+                  variant={feedback === "not_helpful" ? "default" : "outline"}
+                  loading={
+                    feedbackMutation.isPending && feedback !== "not_helpful"
+                  }
+                  disabled={feedbackPending}
+                  onClick={() => feedbackMutation.mutate("not_helpful")}
+                >
+                  Not helpful
+                </LoadingButton>
+                {feedback ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={feedbackPending}
+                    onClick={() => clearFeedbackMutation.mutate()}
+                  >
+                    Clear feedback
+                  </Button>
+                ) : null}
+              </dd>
+              <dd className="mt-2 text-xs text-muted-foreground">
+                {feedback
+                  ? `Your feedback on this result: ${
+                      feedback === "helpful" ? "Helpful" : "Not helpful"
+                    }`
+                  : "Your feedback refers to the result shown above. It is not sent to any external service."}
               </dd>
             </div>
           </dl>
