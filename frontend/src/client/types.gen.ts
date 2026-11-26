@@ -328,6 +328,64 @@ export type Token = {
 export type TriageSentiment = 'positive' | 'neutral' | 'negative';
 
 /**
+ * TriageUsageBucket
+ */
+export type TriageUsageBucket = {
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Model
+     */
+    model?: string | null;
+    outcome: TriageUsageOutcome;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Avg Latency Ms
+     */
+    avg_latency_ms: number;
+    /**
+     * Max Latency Ms
+     */
+    max_latency_ms: number;
+    /**
+     * Input Tokens Total
+     */
+    input_tokens_total?: number | null;
+    /**
+     * Output Tokens Total
+     */
+    output_tokens_total?: number | null;
+    /**
+     * Unknown Token Count
+     */
+    unknown_token_count: number;
+};
+
+/**
+ * TriageUsageOutcome
+ */
+export type TriageUsageOutcome = 'succeeded' | 'invalid_response' | 'provider_error' | 'timeout';
+
+/**
+ * TriageUsageSummary
+ */
+export type TriageUsageSummary = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Buckets
+     */
+    buckets: Array<TriageUsageBucket>;
+};
+
+/**
  * UpdatePassword
  */
 export type UpdatePassword = {
@@ -1254,6 +1312,22 @@ export type conversationsTriageConversationResponses = {
 };
 
 export type conversationsTriageConversationResponse = conversationsTriageConversationResponses[keyof conversationsTriageConversationResponses];
+
+export type triageUsageReadTriageUsageData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/triage-usage/';
+};
+
+export type triageUsageReadTriageUsageResponses = {
+    /**
+     * Successful Response
+     */
+    200: TriageUsageSummary;
+};
+
+export type triageUsageReadTriageUsageResponse = triageUsageReadTriageUsageResponses[keyof triageUsageReadTriageUsageResponses];
 
 export type privateCreateUserData = {
     body: PrivateUserCreate;

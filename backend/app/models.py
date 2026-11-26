@@ -128,6 +128,16 @@ TRIAGE_SUMMARY_MAX_LENGTH = 1000
 TRIAGE_INTENT_MAX_LENGTH = 64
 TRIAGE_NEXT_ACTION_MAX_LENGTH = 500
 
+TRIAGE_USAGE_PROVIDER_MAX_LENGTH = 64
+TRIAGE_USAGE_MODEL_MAX_LENGTH = 96
+
+
+class TriageUsageOutcome(StrEnum):
+    SUCCEEDED = "succeeded"
+    INVALID_RESPONSE = "invalid_response"
+    PROVIDER_ERROR = "provider_error"
+    TIMEOUT = "timeout"
+
 
 class TriageSentiment(StrEnum):
     POSITIVE = "positive"
@@ -238,6 +248,50 @@ class ConversationTriagePublic(ConversationTriage):
 class ConversationsPublic(SQLModel):
     data: list[ConversationSummary]
     count: int
+
+
+# Content-free triage usage accounting. Deliberately stores no conversation or
+# user identifier, and no transcript, prompt, model output, or credential.
+class TriageUsage(SQLModel, table=True):
+    __tablename__ = "triage_usage"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc, index=True, nullable=False
+    )
+    provider: str | None = Field(
+        default=None,
+        max_length=TRIAGE_USAGE_PROVIDER_MAX_LENGTH,
+        sa_type=String(TRIAGE_USAGE_PROVIDER_MAX_LENGTH),
+    )
+    model: str | None = Field(
+        default=None,
+        max_length=TRIAGE_USAGE_MODEL_MAX_LENGTH,
+        sa_type=String(TRIAGE_USAGE_MODEL_MAX_LENGTH),
+    )
+    outcome: TriageUsageOutcome = Field(sa_type=String(32), max_length=32)
+    attempts: int
+    latency_ms: int
+    # NULL means the client did not supply the count; values are never estimated.
+    input_tokens: int | None = Field(default=None)
+    output_tokens: int | None = Field(default=None)
+
+
+class TriageUsageBucket(SQLModel):
+    provider: str | None = None
+    model: str | None = None
+    outcome: TriageUsageOutcome
+    count: int
+    avg_latency_ms: float
+    max_latency_ms: int
+    input_tokens_total: int | None = None
+    output_tokens_total: int | None = None
+    unknown_token_count: int
+
+
+class TriageUsageSummary(SQLModel):
+    total: int
+    buckets: list[TriageUsageBucket]
 
 
 # Generic message

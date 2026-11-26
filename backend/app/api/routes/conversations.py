@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import Any
 
@@ -12,20 +13,47 @@ from app.models import (
     ConversationPublic,
     ConversationsPublic,
     ConversationSummary,
-    ConversationTriage,
     ConversationTriagePublic,
     ConversationUpdate,
     Message,
+    TriageUsage,
     get_datetime_utc,
 )
 from app.triage import (
     TriageClientDep,
-    TriageProviderError,
+    TriageRun,
     TriageTimeoutError,
     run_triage,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+
+def _record_triage_usage(session: SessionDep, run: TriageRun) -> None:
+    """Record content-free usage metadata without ever blocking triage.
+
+    Only provider/model identifiers, the outcome, the attempt count, local
+    latency, and optional token counts are stored. No conversation, user, or
+    content identifier is included.
+    """
+    try:
+        session.add(
+            TriageUsage(
+                provider=run.provider,
+                model=run.model,
+                outcome=run.outcome,
+                attempts=run.attempts,
+                latency_ms=run.latency_ms,
+                input_tokens=run.input_tokens,
+                output_tokens=run.output_tokens,
+            )
+        )
+        session.commit()
+    except Exception:  # noqa: BLE001 - accounting must never break triage
+        session.rollback()
+        logger.warning("Could not record triage usage metadata")
 
 
 def _validate_transcript_length(transcript: str | None) -> None:
@@ -158,13 +186,17 @@ def triage_conversation(
     conversation = _get_owned_conversation(
         session=session, current_user=current_user, id=id
     )
-    try:
-        result: ConversationTriage = run_triage(
-            client=triage_client, transcript=conversation.transcript
-        )
-    except TriageTimeoutError:
-        raise HTTPException(status_code=504, detail="Triage timed out")
-    except TriageProviderError:
+    run = run_triage(client=triage_client, transcript=conversation.transcript)
+
+    if not run.succeeded:
+        _record_triage_usage(session, run)
+        if isinstance(run.error, TriageTimeoutError):
+            raise HTTPException(status_code=504, detail="Triage timed out")
+        raise HTTPException(status_code=502, detail="Triage provider failed")
+
+    result = run.result
+    if result is None:  # defensive: succeeded implies a validated result
+        _record_triage_usage(session, run)
         raise HTTPException(status_code=502, detail="Triage provider failed")
 
     triaged_at = get_datetime_utc()
@@ -179,6 +211,7 @@ def triage_conversation(
     )
     session.add(conversation)
     session.commit()
+    _record_triage_usage(session, run)
     return ConversationTriagePublic(
         summary=result.summary,
         intent=result.intent,

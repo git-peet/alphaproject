@@ -3,7 +3,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, delete, select
 
 from app import crud
 from app.core.config import settings
@@ -12,10 +12,13 @@ from app.models import (
     CONVERSATION_TRANSCRIPT_MAX_LENGTH,
     Conversation,
     ConversationTriagePublic,
+    TriageUsage,
+    TriageUsageOutcome,
     User,
     UserUpdate,
 )
 from app.triage import (
+    TriageClientResponse,
     TriageProviderError,
     TriageTimeoutError,
     get_triage_client,
@@ -261,16 +264,30 @@ TRIAGE_TRANSCRIPT_MARKER = "do-not-leak-this-transcript"
 
 
 class ScriptedTriageClient:
-    def __init__(self, responses: list[object]) -> None:
+    def __init__(
+        self,
+        responses: list[object],
+        *,
+        provider: str | None = None,
+        model: str | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> None:
         self._responses = responses
+        self._metadata = {
+            "provider": provider,
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        }
         self.calls = 0
 
-    def request_triage(self, *, transcript: str) -> str:
+    def request_triage(self, *, transcript: str) -> TriageClientResponse:
         self.calls += 1
         response = self._responses[min(self.calls, len(self._responses)) - 1]
         if isinstance(response, Exception):
             raise response
-        return str(response)
+        return TriageClientResponse(payload=str(response), **self._metadata)
 
 
 def _triage_payload(**overrides: str) -> str:
@@ -570,3 +587,174 @@ def test_default_fake_triage_client_is_used(
 def _clear_triage_client_override():
     yield
     _clear_triage_override()
+
+
+# ---------------------------------------------------------------------------
+# Usage accounting
+# ---------------------------------------------------------------------------
+
+
+def _usage_rows(db: Session) -> list[TriageUsage]:
+    return list(db.exec(select(TriageUsage)).all())
+
+
+def _clear_usage(db: Session) -> None:
+    """Usage rows outlive the shared session fixture, so start clean."""
+    db.exec(delete(TriageUsage))
+    db.commit()
+
+
+def test_triage_success_records_content_free_usage(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = _owned_conversation(
+        client, superuser_token_headers, TRIAGE_TRANSCRIPT_MARKER
+    )
+    _clear_usage(db)
+    _use_triage_client(
+        ScriptedTriageClient(
+            [_triage_payload()], provider="example-provider", model="example-model"
+        )
+    )
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+    assert response.status_code == 200
+
+    db.expire_all()
+    rows = _usage_rows(db)
+    assert len(rows) == 1
+    usage = rows[0]
+    assert TriageUsageOutcome(usage.outcome) is TriageUsageOutcome.SUCCEEDED
+    assert usage.provider == "example-provider"
+    assert usage.model == "example-model"
+    assert usage.attempts == 1
+    assert usage.latency_ms >= 0
+    assert usage.input_tokens is None
+    assert usage.output_tokens is None
+    assert usage.created_at is not None
+    assert TRIAGE_TRANSCRIPT_MARKER not in repr(usage.__dict__)
+    assert conversation["id"] not in repr(usage.__dict__)
+
+
+def test_usage_row_has_only_content_free_fields() -> None:
+    assert set(TriageUsage.model_fields) == {
+        "id",
+        "created_at",
+        "provider",
+        "model",
+        "outcome",
+        "attempts",
+        "latency_ms",
+        "input_tokens",
+        "output_tokens",
+    }
+
+
+def test_triage_timeout_records_timeout_usage(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = _owned_conversation(
+        client, superuser_token_headers, TRIAGE_TRANSCRIPT_MARKER
+    )
+    _clear_usage(db)
+    _use_triage_client(ScriptedTriageClient([TriageTimeoutError("slow")]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+    assert response.status_code == 504
+
+    db.expire_all()
+    rows = _usage_rows(db)
+    assert len(rows) == 1
+    assert TriageUsageOutcome(rows[0].outcome) is TriageUsageOutcome.TIMEOUT
+    assert rows[0].attempts == 2
+    assert rows[0].input_tokens is None
+    assert rows[0].output_tokens is None
+
+
+def test_triage_invalid_payload_records_invalid_response_usage(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    _clear_usage(db)
+    _use_triage_client(ScriptedTriageClient(["{not json"]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+    assert response.status_code == 502
+
+    db.expire_all()
+    rows = _usage_rows(db)
+    assert len(rows) == 1
+    assert TriageUsageOutcome(rows[0].outcome) is TriageUsageOutcome.INVALID_RESPONSE
+
+
+def test_triage_provider_error_records_provider_error_usage(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    _clear_usage(db)
+    _use_triage_client(ScriptedTriageClient([TriageProviderError("boom")]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+    assert response.status_code == 502
+
+    db.expire_all()
+    rows = _usage_rows(db)
+    assert len(rows) == 1
+    assert TriageUsageOutcome(rows[0].outcome) is TriageUsageOutcome.PROVIDER_ERROR
+
+
+def test_usage_recording_failure_does_not_block_triage(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.routes import conversations as conversations_module
+
+    class ExplodingUsage:
+        def __init__(self, **kwargs: object) -> None:
+            raise RuntimeError("usage store unavailable")
+
+    monkeypatch.setattr(conversations_module, "TriageUsage", ExplodingUsage)
+
+    conversation = _owned_conversation(client, superuser_token_headers, "Hello there")
+    _clear_usage(db)
+    _use_triage_client(ScriptedTriageClient([_triage_payload()]))
+    try:
+        response = client.post(
+            f"{settings.API_V1_STR}/conversations/{conversation['id']}/triage",
+            headers=superuser_token_headers,
+        )
+    finally:
+        _clear_triage_override()
+
+    assert response.status_code == 200
+    assert response.json()["summary"] == "Customer asks about an invoice"
+
+    stored = db.get(Conversation, conversation["id"])
+    assert stored is not None
+    db.refresh(stored)
+    assert stored.triage_summary == "Customer asks about an invoice"
+
+    db.expire_all()
+    assert _usage_rows(db) == []
