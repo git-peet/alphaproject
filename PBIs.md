@@ -391,6 +391,33 @@ As an administrator, I want to review aggregate triage usage and latency without
 - Start with fake client metadata in tests. Live-provider accounting and any provider-specific billing semantics require a separately approved integration decision.
 - Defer an admin usage UI until the persisted usage contract and access rules are validated.
 
+### Run record — 2026-11-26
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** single Alembic head `b2e5c8a4f901`; 39 focused triage/usage tests and 120 full isolated
+  backend tests passed; client regenerated (`TriageUsageService`) and `bun run build` passed; no
+  leftover disposable databases.
+- **Lab database:** migrated additively from `4a7c2b9d1e63` to `b2e5c8a4f901`; `triage_usage` table
+  and `created_at` index created, existing rows unchanged (`users=10, items=4, conversations=0`).
+- **Behaviour:** one content-free usage row per triage outcome; provider/model id, outcome, attempts,
+  locally measured latency, and nullable token counts only (`NULL` = unavailable). No conversation/user
+  identifier, transcript, prompt, model output, credential, or billing detail in usage records.
+  Recording failures log a content-free warning and never block triage. `GET /triage-usage/` is
+  superuser-only with `(provider, model, outcome)` aggregates.
+- **Crash/resume:** the laptop crashed mid-implementation; Docker services were restarted, the
+  approved checkpoint and partial files were preserved, and Pi resumed from the exact stopping point
+  without redoing completed work. Fixes during resume: duplicated `)`, unused import, distinct
+  `provider_error` vs `invalid_response`, and two test-side corrections (enum-vs-string comparison,
+  clearing `triage_usage` between tests).
+- **Measured session:** 998 s, 80 tool calls, 6 retrieval calls (3 applicable, 3 no_match), 26.5M
+  tokens, $0.1607, model `deepseek-v4.1-flash`, tagged `experiment_id=ALPHA-DELIVERY-R1`. No gate
+  blocks. This is the most expensive paid-model PBI so far, partly due to the crash/resume interval.
+- **Knowledge:** two verified findings staged and promoted with explicit user approval:
+  `strenum-string-column-returns-str` and `session-fixture-leaves-new-tables`. Pending queue empty.
+- **Workflow:** implementation log written before checkpoint disposition; B then deleted the
+  checkpoint cleanly. The prompt-ordering fix remains proposed, not applied.
+- **Next safe action:** commit the application changes; start PBI 7 only after that.
+
 ---
 
 ## PBI 6 — Consider asynchronous triage
