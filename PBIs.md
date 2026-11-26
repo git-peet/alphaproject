@@ -532,6 +532,30 @@ As a signed-in user, I want to mark whether a conversation's current triage was 
 - Test ownership, missing/stale triage, feedback replacement/clearing behavior, and UI states.
 - Do not send feedback or conversation content to an external provider; any aggregate usage reporting remains under the separate PBI 5.
 
+### Run record — 2026-11-26
+
+- **Status:** complete. Code changes are in the application working tree, ready to commit.
+- **Result:** 10 focused feedback tests and 148 full isolated backend tests passed; client regenerated
+  with `setTriageFeedback`/`clearTriageFeedback`; build and lint clean; Playwright conversations +
+  items **25/25**. No leftover databases; app rows unchanged (`users=10, items=4, conversations=0`).
+- **Lab database:** migrated additively from `b2e5c8a4f901` to `c9d1e7a3b528`; two nullable feedback
+  columns added, no row changes.
+- **Behaviour:** `helpful`/`not_helpful` only; PUT replaces, DELETE clears idempotently; 409 without
+  a triage result; 404/403 ownership policy preserved with no superuser bypass; re-triage clears
+  feedback while transcript/title edits preserve it. Feedback does not change the triage result,
+  create usage rows, or enter export v1. UI controls appear only when a result exists and never imply
+  a new model call.
+- **Measured session:** 335 s, 43 tool calls, 2 retrieval calls (1 applicable, 1 no_match), 24.6M
+  tokens, $0.0949, model `deepseek-v4.1-flash`, tagged `ALPHA-DELIVERY-R1`. No gate blocks.
+- **Knowledge:** no new candidate qualified; the exact-locator detail was already covered by an active
+  record, so the agent reused that record instead of staging a duplicate. This is the cleanest
+  knowledge-deduplication signal in the round.
+- **Fixes during the run:** missing `Button` import found by build and corrected.
+- **Workflow:** implementation log written before checkpoint disposition; B then deleted the
+  checkpoint cleanly.
+- **Next safe action:** commit the application changes; R1 can then be closed with a consolidated
+  metrics comparison.
+
 ---
 
 ## PBI 10 — Add deterministic delivery-plan preflight validator
