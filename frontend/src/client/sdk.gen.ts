@@ -369,6 +369,9 @@ export class ConversationsService {
      * Read Conversations
      *
      * Retrieve conversations owned by the current user.
+     *
+     * `search` is a bounded, case-insensitive title match. It is never logged.
+     * The returned `count` is the filtered total for the owner.
      */
     public static readConversations<ThrowOnError extends boolean = true>(options?: Options<conversationsReadConversationsData, ThrowOnError>) {
         return (options?.client ?? client).get<conversationsReadConversationsResponses, conversationsReadConversationsErrors, ThrowOnError>({

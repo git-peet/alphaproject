@@ -31,7 +31,7 @@ test.describe("Conversations", () => {
     page,
   }) => {
     await expect(
-      page.getByRole("heading", { name: "Conversations" }),
+      page.getByRole("heading", { name: "Conversations", exact: true }),
     ).toBeVisible()
     await expect(
       page.getByText("You don't have any conversations yet"),
@@ -128,7 +128,7 @@ test.describe("Conversations", () => {
       page.getByText("The conversation was deleted successfully"),
     ).toBeVisible()
     await expect(
-      page.getByRole("heading", { name: "Conversations" }),
+      page.getByRole("heading", { name: "Conversations", exact: true }),
     ).toBeVisible()
     await expect(page.getByText(title)).not.toBeVisible()
   })
@@ -174,5 +174,138 @@ test.describe("Conversation privacy", () => {
     ).not.toBeVisible()
 
     await otherContext.close()
+  })
+})
+
+test.describe("Conversation search and pagination", () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  const apiBase = () => process.env.VITE_API_URL ?? ""
+
+  const seedConversations = async (
+    request: import("@playwright/test").APIRequestContext,
+    email: string,
+    password: string,
+    titles: string[],
+  ) => {
+    const tokenResponse = await request.post(
+      `${apiBase()}/api/v1/login/access-token`,
+      { form: { username: email, password } },
+    )
+    expect(tokenResponse.ok()).toBeTruthy()
+    const { access_token } = await tokenResponse.json()
+
+    for (const title of titles) {
+      const created = await request.post(`${apiBase()}/api/v1/conversations/`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+        data: { title, transcript: "Seeded transcript" },
+      })
+      expect(created.ok()).toBeTruthy()
+    }
+  }
+
+  test("Search narrows the list and shows a no-match state", async ({
+    page,
+    request,
+  }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    await seedConversations(request, email, password, [
+      "Invoice alpha",
+      "Invoice beta",
+      "Shipping question",
+    ])
+    await logInUser(page, email, password)
+    await page.goto("/conversations")
+
+    await page.getByLabel("Search conversations").fill("INVOICE")
+    await page.getByRole("button", { name: "Search" }).click()
+
+    await expect(page.getByText("Invoice alpha")).toBeVisible()
+    await expect(page.getByText("Invoice beta")).toBeVisible()
+    await expect(page.getByText("Shipping question")).not.toBeVisible()
+    await expect(
+      page.getByText("Showing 1 to 2 of 2 conversations"),
+    ).toBeVisible()
+
+    await page.getByLabel("Search conversations").fill("zzz no match")
+    await page.getByRole("button", { name: "Search" }).click()
+
+    await expect(
+      page.getByText("No conversations match your search"),
+    ).toBeVisible()
+    await expect(page.getByText("Invoice alpha")).not.toBeVisible()
+  })
+
+  test("Clearing search restores the full list", async ({ page, request }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    await seedConversations(request, email, password, [
+      "Kept by clear",
+      "Other subject",
+    ])
+    await logInUser(page, email, password)
+    await page.goto("/conversations")
+
+    await page.getByLabel("Search conversations").fill("kept")
+    await page.getByRole("button", { name: "Search" }).click()
+    await expect(page.getByText("Other subject")).not.toBeVisible()
+
+    await page.getByRole("button", { name: "Clear" }).click()
+
+    await expect(page.getByText("Kept by clear")).toBeVisible()
+    await expect(page.getByText("Other subject")).toBeVisible()
+    await expect(
+      page.getByText("Showing 1 to 2 of 2 conversations"),
+    ).toBeVisible()
+  })
+
+  test("Pagination moves to the next page and resets on a new search", async ({
+    page,
+    request,
+  }) => {
+    const email = randomEmail()
+    const password = randomPassword()
+    await createUser({ email, password })
+    const titles = Array.from(
+      { length: 12 },
+      (_, index) => `Bulk item ${index}`,
+    )
+    await seedConversations(request, email, password, titles)
+    await logInUser(page, email, password)
+    await page.goto("/conversations")
+
+    await expect(
+      page.getByText("Showing 1 to 10 of 12 conversations"),
+    ).toBeVisible()
+    await expect(page.getByRole("button", { name: "Previous" })).toBeDisabled()
+
+    await page.getByRole("button", { name: "Next" }).click()
+
+    await expect(
+      page.getByText("Showing 11 to 12 of 12 conversations"),
+    ).toBeVisible()
+    await expect(page.getByRole("button", { name: "Next" })).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Previous" })).toBeEnabled()
+
+    await page.getByRole("button", { name: "Previous" }).click()
+    await expect(
+      page.getByText("Showing 1 to 10 of 12 conversations"),
+    ).toBeVisible()
+
+    await page.getByRole("button", { name: "Next" }).click()
+    await expect(
+      page.getByText("Showing 11 to 12 of 12 conversations"),
+    ).toBeVisible()
+
+    await page.getByLabel("Search conversations").fill("Bulk item 11")
+    await page.getByRole("button", { name: "Search" }).click()
+
+    await expect(
+      page.getByText("Showing 1 to 1 of 1 conversations"),
+    ).toBeVisible()
+    await expect(page.getByRole("button", { name: "Previous" })).toBeDisabled()
   })
 })

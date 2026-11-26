@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -27,6 +27,9 @@ from app.triage import (
 )
 
 logger = logging.getLogger(__name__)
+
+MAX_CONVERSATION_PAGE_SIZE = 100
+CONVERSATION_SEARCH_MAX_LENGTH = 100
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -91,21 +94,32 @@ def _get_owned_conversation(
 
 @router.get("/", response_model=ConversationsPublic)
 def read_conversations(
-    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=MAX_CONVERSATION_PAGE_SIZE, ge=1, le=MAX_CONVERSATION_PAGE_SIZE),
+    search: str | None = Query(
+        default=None, max_length=CONVERSATION_SEARCH_MAX_LENGTH
+    ),
 ) -> Any:
     """
     Retrieve conversations owned by the current user.
+
+    `search` is a bounded, case-insensitive title match. It is never logged.
+    The returned `count` is the filtered total for the owner.
     """
-    count_statement = (
-        select(func.count())
-        .select_from(Conversation)
-        .where(Conversation.owner_id == current_user.id)
-    )
+    filters = [Conversation.owner_id == current_user.id]
+    term = (search or "").strip()
+    if term:
+        filters.append(col(Conversation.title).icontains(term, autoescape=True))
+
+    count_statement = select(func.count()).select_from(Conversation).where(*filters)
     count = session.exec(count_statement).one()
+
     statement = (
         select(Conversation)
-        .where(Conversation.owner_id == current_user.id)
-        .order_by(col(Conversation.created_at).desc())
+        .where(*filters)
+        .order_by(col(Conversation.created_at).desc(), col(Conversation.id).desc())
         .offset(skip)
         .limit(limit)
     )

@@ -177,6 +177,182 @@ def test_read_conversations_scoped_to_owner(
     assert "transcript" not in mine.json()["data"][0]
 
 
+def _create_conversation(
+    client: TestClient, headers: dict[str, str], title: str
+) -> dict[str, str]:
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/",
+        headers=headers,
+        json={"title": title, "transcript": "Transcript body"},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _list(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    search: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+) -> dict:
+    params: dict[str, object] = {"skip": skip, "limit": limit}
+    if search is not None:
+        params["search"] = search
+    response = client.get(
+        f"{settings.API_V1_STR}/conversations/", headers=headers, params=params
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_search_matches_owner_titles_case_insensitively(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    _create_conversation(client, headers, "Invoice dispute")
+    _create_conversation(client, headers, "Shipping question")
+    _create_conversation(client, headers, "invoice follow up")
+
+    result = _list(client, headers, search="INVOICE")
+
+    titles = [item["title"] for item in result["data"]]
+    assert sorted(titles) == ["Invoice dispute", "invoice follow up"]
+    assert result["count"] == 2
+    assert "transcript" not in result["data"][0]
+
+
+def test_search_no_match_returns_empty_page_and_zero_count(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    _create_conversation(client, headers, "Billing question")
+
+    result = _list(client, headers, search="nothing matches this")
+
+    assert result["data"] == []
+    assert result["count"] == 0
+
+
+def test_blank_search_behaves_like_no_filter(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    _create_conversation(client, headers, "Alpha")
+    _create_conversation(client, headers, "Beta")
+
+    assert _list(client, headers, search="   ")["count"] == 2
+    assert _list(client, headers)["count"] == 2
+
+
+def test_search_treats_wildcards_literally(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    _create_conversation(client, headers, "100% complete")
+    _create_conversation(client, headers, "plain title")
+    _create_conversation(client, headers, "under_score")
+
+    percent = _list(client, headers, search="100%")
+    assert [item["title"] for item in percent["data"]] == ["100% complete"]
+    assert percent["count"] == 1
+
+    underscore = _list(client, headers, search="under_")
+    assert [item["title"] for item in underscore["data"]] == ["under_score"]
+    assert underscore["count"] == 1
+
+    every_title = _list(client, headers, search="%")
+    assert every_title["count"] == 1
+
+
+def test_search_is_scoped_to_the_owner(client: TestClient, db: Session) -> None:
+    owner_headers = _headers_for(client, db)
+    _create_conversation(client, owner_headers, "Shared secret plan")
+
+    other_headers = _headers_for(client, db)
+    _create_conversation(client, other_headers, "Shared secret plan of mine")
+
+    owner_result = _list(client, owner_headers, search="secret")
+    assert owner_result["count"] == 1
+    assert owner_result["data"][0]["title"] == "Shared secret plan"
+
+    other_result = _list(client, other_headers, search="secret")
+    assert other_result["count"] == 1
+    assert other_result["data"][0]["title"] == "Shared secret plan of mine"
+
+    _create_conversation(client, other_headers, "Unrelated")
+    owner_titles = [
+        item["title"] for item in _list(client, owner_headers)["data"]
+    ]
+    assert all("Unrelated" not in title for title in owner_titles)
+
+
+def test_pagination_slices_with_filtered_count(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    for index in range(5):
+        _create_conversation(client, headers, f"Paged item {index}")
+
+    first = _list(client, headers, skip=0, limit=2)
+    second = _list(client, headers, skip=2, limit=2)
+
+    assert first["count"] == 5
+    assert second["count"] == 5
+    assert len(first["data"]) == 2
+    assert len(second["data"]) == 2
+    assert {item["id"] for item in first["data"]}.isdisjoint(
+        {item["id"] for item in second["data"]}
+    )
+
+
+def test_pagination_ordering_is_deterministic(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    for index in range(4):
+        _create_conversation(client, headers, f"Ordered item {index}")
+
+    full = _list(client, headers, limit=10)["data"]
+    again = _list(client, headers, limit=10)["data"]
+    assert [item["id"] for item in full] == [item["id"] for item in again]
+
+    page_one = _list(client, headers, skip=0, limit=2)["data"]
+    page_two = _list(client, headers, skip=2, limit=2)["data"]
+    assert [item["id"] for item in page_one + page_two] == [
+        item["id"] for item in full
+    ]
+
+
+def test_search_and_pagination_combine(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    for index in range(4):
+        _create_conversation(client, headers, f"Match me {index}")
+    _create_conversation(client, headers, "Different subject")
+
+    page = _list(client, headers, search="match me", skip=0, limit=1)
+    assert page["count"] == 4
+    assert len(page["data"]) == 1
+
+
+def test_pagination_parameters_are_validated(
+    client: TestClient, db: Session
+) -> None:
+    headers = _headers_for(client, db)
+    base = f"{settings.API_V1_STR}/conversations/"
+
+    assert client.get(base, headers=headers, params={"limit": 101}).status_code == 422
+    assert client.get(base, headers=headers, params={"limit": 0}).status_code == 422
+    assert client.get(base, headers=headers, params={"skip": -1}).status_code == 422
+    assert (
+        client.get(base, headers=headers, params={"search": "x" * 101}).status_code
+        == 422
+    )
+
+
 def test_update_conversation(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:

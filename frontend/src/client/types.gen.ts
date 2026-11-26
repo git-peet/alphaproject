@@ -1146,6 +1146,10 @@ export type conversationsReadConversationsData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Search
+         */
+        search?: string | null;
     };
     url: '/api/v1/conversations/';
 };
