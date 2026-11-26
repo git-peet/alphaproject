@@ -367,7 +367,17 @@ As a signed-in user, I want to create, find, and review my conversations and the
 
 ## PBI 5 — Add content-free triage usage accounting
 
-**Status:** deferred — needs an approved provider boundary.
+**Status:** ready — bounded, model-agnostic provider metadata boundary approved.
+
+### Provider boundary decision
+
+No live provider is approved. The triage client may return optional, content-free metadata only:
+provider identifier, model identifier, outcome/status, and token counts when supplied. Latency is
+measured locally. Unknown token counts are recorded as `unavailable`, never estimated. No
+transcript, prompt, model output, credential, secret, or billing detail may enter usage records.
+The current runtime model/provider is run metadata, not a hardcoded assumption in this contract.
+Live-provider accounting, endpoints, credentials, privacy review, and billing semantics require a
+separate PBI and explicit approval.
 
 ### User story
 As an administrator, I want to review aggregate triage usage and latency without seeing conversation content, so that I can monitor cost and performance.
